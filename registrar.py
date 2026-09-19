@@ -4,7 +4,8 @@ from playwright.async_api import async_playwright
 URL = "https://in.mpms.mufg.com/Initial_Offer/public-issues.html"
 
 
-async def inspect_company():
+async def inspect_form():
+
     async with async_playwright() as p:
 
         browser = await p.chromium.launch(
@@ -21,67 +22,77 @@ async def inspect_company():
 
         await page.wait_for_timeout(3000)
 
-        print("\n--- PAGE LOADED ---")
-
-        selects = page.locator("select")
-
-        print("Select count:", await selects.count())
-
-        for i in range(await selects.count()):
-
-            select = selects.nth(i)
-
-            print("\nSelect:", i)
-            print("ID:", await select.get_attribute("id"))
-            print("Name:", await select.get_attribute("name"))
-
-        print("\n--- SELECT MANIKA PLASTECH ---")
-
-        manika = page.locator(
+        # Select Manika Plastech
+        await page.locator(
             'option[value="11937"]'
+        ).locator("xpath=..").select_option("11937")
+
+        await page.wait_for_timeout(2000)
+
+        print("\n--- RADIO OPTIONS ---")
+
+        radios = page.locator(
+            'input[type="radio"]'
         )
 
-        print("Manika option count:", await manika.count())
+        for i in range(await radios.count()):
 
-        if await manika.count() == 0:
-
-            print("Manika option not found.")
-
-        else:
-
-            parent_select = manika.locator("xpath=..")
-
-            await parent_select.select_option("11937")
-
-            print("Manika selected successfully.")
-
-            await page.wait_for_timeout(5000)
-
-        print("\n--- PAGE CONTENT AFTER SELECTION ---")
-
-        text = await page.locator("body").inner_text()
-
-        print(text[:10000])
-
-        print("\n--- ALL INPUT FIELDS ---")
-
-        inputs = page.locator("input")
-
-        for i in range(await inputs.count()):
-
-            field = inputs.nth(i)
+            radio = radios.nth(i)
 
             print(
-                "Input",
+                "Radio:",
                 i,
-                "| type:",
-                await field.get_attribute("type"),
-                "| name:",
-                await field.get_attribute("name"),
-                "| id:",
+                "| ID:",
+                await radio.get_attribute("id"),
+                "| Value:",
+                await radio.get_attribute("value"),
+                "| Checked:",
+                await radio.is_checked()
+            )
+
+        print("\n--- BUTTON DETAILS ---")
+
+        button = page.locator("#btnsearc")
+
+        print("Button count:", await button.count())
+
+        if await button.count():
+
+            print(
+                "Button HTML:",
+                await button.evaluate(
+                    "(el) => el.outerHTML"
+                )
+            )
+
+        print("\n--- CAPTCHA DETAILS ---")
+
+        captcha = page.locator("#txtCaptch")
+
+        print(
+            "CAPTCHA HTML:",
+            await captcha.evaluate(
+                "(el) => el.outerHTML"
+            )
+        )
+
+        print("\n--- HIDDEN FIELDS ---")
+
+        hidden = page.locator(
+            'input[type="hidden"]'
+        )
+
+        for i in range(await hidden.count()):
+
+            field = hidden.nth(i)
+
+            print(
+                "Hidden:",
+                i,
+                "| ID:",
                 await field.get_attribute("id"),
-                "| placeholder:",
-                await field.get_attribute("placeholder")
+                "| Value:",
+                await field.get_attribute("value")
             )
 
         await browser.close()
@@ -89,4 +100,4 @@ async def inspect_company():
 
 if __name__ == "__main__":
 
-    asyncio.run(inspect_company())
+    asyncio.run(inspect_form())
