@@ -4,8 +4,9 @@ from playwright.async_api import async_playwright
 URL = "https://in.mpms.mufg.com/Initial_Offer/public-issues.html"
 
 
-async def inspect_page():
+async def inspect_company():
     async with async_playwright() as p:
+
         browser = await p.chromium.launch(
             headless=True
         )
@@ -20,56 +21,72 @@ async def inspect_page():
 
         await page.wait_for_timeout(3000)
 
-        print("\n--- PAGE TITLE ---")
-        print(await page.title())
+        print("\n--- PAGE LOADED ---")
 
-        print("\n--- COMPANY OPTIONS ---")
+        selects = page.locator("select")
 
-        options = await page.locator(
-            "select option"
-        ).all()
+        print("Select count:", await selects.count())
 
-        for option in options:
-            text = (await option.inner_text()).strip()
-            value = await option.get_attribute("value")
+        for i in range(await selects.count()):
 
-            if "manika" in text.lower():
-                print(f"Company: {text}")
-                print(f"Value: {value}")
+            select = selects.nth(i)
 
-        print("\n--- FORMS ---")
+            print("\nSelect:", i)
+            print("ID:", await select.get_attribute("id"))
+            print("Name:", await select.get_attribute("name"))
 
-        forms = await page.locator("form").all()
+        print("\n--- SELECT MANIKA PLASTECH ---")
 
-        for form in forms:
-            action = await form.get_attribute("action")
-            method = await form.get_attribute("method")
+        manika = page.locator(
+            'option[value="11937"]'
+        )
 
-            print(f"Action: {action}")
-            print(f"Method: {method}")
+        print("Manika option count:", await manika.count())
 
-        print("\n--- BUTTONS ---")
+        if await manika.count() == 0:
 
-        buttons = await page.locator("button").all()
+            print("Manika option not found.")
 
-        for button in buttons:
-            text = (await button.inner_text()).strip()
+        else:
 
-            if text:
-                print(f"Button: {text}")
+            parent_select = manika.locator("xpath=..")
 
-        print("\n--- INPUT FIELDS ---")
+            await parent_select.select_option("11937")
 
-        inputs = await page.locator("input").all()
+            print("Manika selected successfully.")
 
-        for field in inputs:
-            name = await field.get_attribute("name")
-            field_type = await field.get_attribute("type")
+            await page.wait_for_timeout(5000)
 
-            print(f"Name: {name} | Type: {field_type}")
+        print("\n--- PAGE CONTENT AFTER SELECTION ---")
+
+        text = await page.locator("body").inner_text()
+
+        print(text[:10000])
+
+        print("\n--- ALL INPUT FIELDS ---")
+
+        inputs = page.locator("input")
+
+        for i in range(await inputs.count()):
+
+            field = inputs.nth(i)
+
+            print(
+                "Input",
+                i,
+                "| type:",
+                await field.get_attribute("type"),
+                "| name:",
+                await field.get_attribute("name"),
+                "| id:",
+                await field.get_attribute("id"),
+                "| placeholder:",
+                await field.get_attribute("placeholder")
+            )
 
         await browser.close()
 
 
 if __name__ == "__main__":
-    asyncio.run(inspect_page())
+
+    asyncio.run(inspect_company())
