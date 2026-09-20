@@ -3,7 +3,7 @@ import asyncio
 from playwright.async_api import async_playwright
 
 
-BIGSHARE_URL = "https://ipo.bigshareonline.com/"
+BIGSHARE_URL = "https://www.bigshareonline.com/ipo_allotment_status.aspx"
 
 
 async def inspect_bigshare():
@@ -17,7 +17,7 @@ async def inspect_bigshare():
         page = await browser.new_page()
 
         print("=" * 70)
-        print("OPENING BIGSHARE IPO STATUS PAGE")
+        print("OPENING BIGSHARE IPO ALLOTMENT STATUS PAGE")
         print("=" * 70)
 
         await page.goto(
@@ -26,7 +26,7 @@ async def inspect_bigshare():
             timeout=60000
         )
 
-        await page.wait_for_timeout(5000)
+        await page.wait_for_timeout(3000)
 
         print()
         print("Page title:")
@@ -34,83 +34,65 @@ async def inspect_bigshare():
 
         print()
         print("=" * 70)
-        print("SELECT ELEMENTS")
+        print("PAGE URL")
         print("=" * 70)
 
-        selects = page.locator("select")
-        select_count = await selects.count()
-
-        print("Total selects:", select_count)
-
-        for i in range(select_count):
-
-            select = selects.nth(i)
-
-            print()
-            print(f"SELECT #{i + 1}")
-
-            print(
-                "id:",
-                await select.get_attribute("id")
-            )
-
-            print(
-                "name:",
-                await select.get_attribute("name")
-            )
-
-            options = select.locator("option")
-            option_count = await options.count()
-
-            print(
-                "options:",
-                option_count
-            )
-
-            for j in range(
-                min(option_count, 50)
-            ):
-
-                option = options.nth(j)
-
-                value = await option.get_attribute(
-                    "value"
-                )
-
-                text = (
-                    await option.inner_text()
-                ).strip()
-
-                print(
-                    f"  {j + 1}. "
-                    f"value={value!r} "
-                    f"text={text!r}"
-                )
+        print(page.url)
 
         print()
         print("=" * 70)
-        print("INPUT ELEMENTS")
+        print("COMPANY DROPDOWN")
         print("=" * 70)
 
-        inputs = page.locator("input")
-        input_count = await inputs.count()
+        company = page.locator("#ddlCompany")
 
-        print(
-            "Total inputs:",
-            input_count
-        )
+        if await company.count() > 0:
 
-        for i in range(input_count):
+            options = company.locator("option")
+            count = await options.count()
 
-            element = inputs.nth(i)
+            print("Company options:", count)
 
-            print()
-            print(f"INPUT #{i + 1}")
+            for i in range(count):
+
+                option = options.nth(i)
+
+                print(
+                    f"{i + 1}. "
+                    f"value={await option.get_attribute('value')!r} "
+                    f"text={(await option.inner_text()).strip()!r}"
+                )
+
+        else:
 
             print(
-                "type:",
-                await element.get_attribute("type")
+                "Company dropdown #ddlCompany was not found."
             )
+
+        print()
+        print("=" * 70)
+        print("FORM ELEMENTS")
+        print("=" * 70)
+
+        elements = page.locator(
+            "input, select, button"
+        )
+
+        count = await elements.count()
+
+        print("Total form elements:", count)
+
+        for i in range(count):
+
+            element = elements.nth(i)
+
+            tag = await element.evaluate(
+                "(el) => el.tagName"
+            )
+
+            print()
+            print(f"ELEMENT #{i + 1}")
+            print("tag:", tag)
 
             print(
                 "id:",
@@ -123,34 +105,102 @@ async def inspect_bigshare():
             )
 
             print(
+                "type:",
+                await element.get_attribute("type")
+            )
+
+            print(
+                "value:",
+                await element.get_attribute("value")
+            )
+
+            print(
                 "placeholder:",
-                await element.get_attribute(
-                    "placeholder"
-                )
+                await element.get_attribute("placeholder")
+            )
+
+            print(
+                "onclick:",
+                await element.get_attribute("onclick")
             )
 
         print()
         print("=" * 70)
-        print("BUTTONS AND LINKS")
+        print("SCRIPT SOURCES")
         print("=" * 70)
 
-        elements = page.locator(
-            "button, "
-            "input[type='button'], "
-            "input[type='submit'], "
-            "a"
-        )
+        scripts = page.locator("script")
 
-        element_count = await elements.count()
+        script_count = await scripts.count()
 
         print(
-            "Total elements:",
-            element_count
+            "Script elements:",
+            script_count
         )
 
-        for i in range(element_count):
+        for i in range(script_count):
 
-            element = elements.nth(i)
+            script = scripts.nth(i)
+
+            src = await script.get_attribute(
+                "src"
+            )
+
+            if src:
+
+                print(
+                    f"{i + 1}. EXTERNAL:",
+                    src
+                )
+
+            else:
+
+                content = await script.inner_text()
+
+                if content.strip():
+
+                    lower = content.lower()
+
+                    interesting = any(
+                        word in lower
+                        for word in [
+                            "ddlcompany",
+                            "captcha",
+                            "search",
+                            "allot",
+                            "ajax",
+                            "$.ajax",
+                            "fetch(",
+                            "xmlhttp"
+                        ]
+                    )
+
+                    if interesting:
+
+                        print()
+                        print(
+                            f"{i + 1}. INLINE SCRIPT:"
+                        )
+
+                        print(
+                            content[:10000]
+                        )
+
+        print()
+        print("=" * 70)
+        print("LINKS / BUTTONS RELATED TO ALLOTMENT")
+        print("=" * 70)
+
+        clickable = page.locator(
+            "a, button, input[type='submit'], "
+            "input[type='button']"
+        )
+
+        clickable_count = await clickable.count()
+
+        for i in range(clickable_count):
+
+            element = clickable.nth(i)
 
             text = (
                 await element.inner_text()
@@ -164,47 +214,93 @@ async def inspect_bigshare():
                 "href"
             )
 
-            element_id = await element.get_attribute(
-                "id"
-            )
+            combined = (
+                text
+                + " "
+                + (value or "")
+                + " "
+                + (href or "")
+            ).lower()
 
-            if text or value or href:
+            if any(
+                word in combined
+                for word in [
+                    "search",
+                    "allot",
+                    "result",
+                    "status",
+                    "captcha"
+                ]
+            ):
 
                 print()
-                print(
-                    f"ELEMENT #{i + 1}"
-                )
-
-                print(
-                    "tag:",
-                    await element.evaluate(
-                        "(el) => el.tagName"
-                    )
-                )
-
-                print(
-                    "id:",
-                    element_id
-                )
-
-                print(
-                    "text:",
-                    text
-                )
-
-                print(
-                    "value:",
-                    value
-                )
-
-                print(
-                    "href:",
-                    href
-                )
+                print("TEXT:", text)
+                print("VALUE:", value)
+                print("HREF:", href)
 
         print()
         print("=" * 70)
-        print("IMPORTANT PAGE TEXT")
+        print("NETWORK REQUESTS DURING PAGE LOAD")
+        print("=" * 70)
+
+        requests_seen = []
+
+        def handle_request(request):
+
+            url = request.url
+
+            lower = url.lower()
+
+            if any(
+                word in lower
+                for word in [
+                    "ipo",
+                    "allot",
+                    "company",
+                    "status",
+                    "api",
+                    "ajax",
+                    "captcha"
+                ]
+            ):
+
+                requests_seen.append(
+                    (
+                        request.method,
+                        url
+                    )
+                )
+
+        page.on(
+            "request",
+            handle_request
+        )
+
+        await page.reload(
+            wait_until="networkidle",
+            timeout=60000
+        )
+
+        await page.wait_for_timeout(3000)
+
+        unique_requests = []
+
+        for item in requests_seen:
+
+            if item not in unique_requests:
+
+                unique_requests.append(item)
+
+        for method, url in unique_requests:
+
+            print(
+                method,
+                url
+            )
+
+        print()
+        print("=" * 70)
+        print("PAGE TEXT")
         print("=" * 70)
 
         body_text = await page.locator(
@@ -217,87 +313,9 @@ async def inspect_bigshare():
             if line.strip()
         ]
 
-        keywords = [
-            "allot",
-            "basis",
-            "ipo",
-            "status",
-            "company",
-            "captcha",
-            "application",
-            "pan",
-            "search",
-            "download",
-            "result"
-        ]
-
-        found_lines = []
-
-        for line in lines:
-
-            lower_line = line.lower()
-
-            if any(
-                keyword in lower_line
-                for keyword in keywords
-            ):
-
-                if line not in found_lines:
-
-                    found_lines.append(line)
-
-        for line in found_lines[:150]:
+        for line in lines[:200]:
 
             print(line)
-
-        print()
-        print("=" * 70)
-        print("IMPORTANT LINKS")
-        print("=" * 70)
-
-        links = page.locator("a")
-        link_count = await links.count()
-
-        for i in range(link_count):
-
-            link = links.nth(i)
-
-            text = (
-                await link.inner_text()
-            ).strip()
-
-            href = await link.get_attribute(
-                "href"
-            )
-
-            combined = (
-                text
-                + " "
-                + (href or "")
-            ).lower()
-
-            if any(
-                keyword in combined
-                for keyword in [
-                    "allot",
-                    "basis",
-                    "ipo",
-                    "status",
-                    "result",
-                    "download"
-                ]
-            ):
-
-                print()
-                print(
-                    "Text:",
-                    text
-                )
-
-                print(
-                    "Href:",
-                    href
-                )
 
         print()
         print("=" * 70)
@@ -309,19 +327,7 @@ async def inspect_bigshare():
 
 async def main():
 
-    try:
-
-        await inspect_bigshare()
-
-    except Exception as error:
-
-        print()
-        print(
-            "Bigshare inspection error:",
-            error
-        )
-
-        raise
+    await inspect_bigshare()
 
 
 if __name__ == "__main__":
