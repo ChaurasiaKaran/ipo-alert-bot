@@ -1,6 +1,7 @@
 import os
 import asyncio
 import requests
+from pathlib import Path
 
 from playwright.async_api import async_playwright
 
@@ -17,10 +18,7 @@ URL = (
 
 COMPANY_VALUE = "11937"
 
-PDF_PATH = (
-    "/Initial_Offer/PDF/"
-    "11937/BasisOfAllotment.pdf"
-)
+STATE_FILE = Path("manika_state.txt")
 
 
 def send_telegram(message):
@@ -39,6 +37,26 @@ def send_telegram(message):
     response.raise_for_status()
 
     print("Telegram notification sent.")
+
+
+def already_alerted(pdf_url):
+
+    if not STATE_FILE.exists():
+        return False
+
+    previous = STATE_FILE.read_text(
+        encoding="utf-8"
+    ).strip()
+
+    return previous == pdf_url
+
+
+def save_state(pdf_url):
+
+    STATE_FILE.write_text(
+        pdf_url,
+        encoding="utf-8"
+    )
 
 
 async def get_pdf_url():
@@ -61,21 +79,30 @@ async def get_pdf_url():
 
         company = page.locator("#ddlCompany")
 
-        await company.select_option(COMPANY_VALUE)
+        await company.select_option(
+            COMPANY_VALUE
+        )
 
         await page.wait_for_timeout(5000)
 
-        basis = page.locator("#basisOfAllotment")
+        basis = page.locator(
+            "#basisOfAllotment"
+        )
 
         if await basis.count() == 0:
 
-            print("Basis of Allotment element not found.")
+            print(
+                "Basis of Allotment element "
+                "not found."
+            )
 
             await browser.close()
 
             return None
 
-        href = await basis.get_attribute("href")
+        href = await basis.get_attribute(
+            "href"
+        )
 
         visible = await basis.is_visible()
 
@@ -103,11 +130,19 @@ def check_pdf(pdf_url):
         }
     )
 
-    print("HTTP status:", response.status_code)
+    print(
+        "HTTP status:",
+        response.status_code
+    )
+
+    content_type = response.headers.get(
+        "Content-Type",
+        ""
+    ).lower()
 
     print(
         "Content type:",
-        response.headers.get("Content-Type")
+        content_type
     )
 
     print(
@@ -117,24 +152,12 @@ def check_pdf(pdf_url):
     )
 
     if response.status_code != 200:
-
         return False
 
-    content_type = response.headers.get(
-        "Content-Type",
-        ""
-    ).lower()
-
     if "pdf" not in content_type:
-
-        print("Response is not a PDF.")
-
         return False
 
     if not response.content.startswith(b"%PDF"):
-
-        print("Downloaded content is not a valid PDF.")
-
         return False
 
     return True
@@ -146,30 +169,60 @@ async def main():
 
     if not pdf_url:
 
-        print("Basis of Allotment PDF is not available.")
+        print(
+            "Basis of Allotment PDF "
+            "is not available."
+        )
 
         return
 
-    print("\nPDF URL:", pdf_url)
+    print("\nPDF URL:")
+    print(pdf_url)
 
     available = check_pdf(pdf_url)
 
-    if available:
+    if not available:
 
-        message = (
-            "🚨 BASIS OF ALLOTMENT AVAILABLE\n\n"
-            "IPO: Manika Plastech Limited\n"
-            "Registrar: MUFG Intime\n\n"
-            "The official Basis of Allotment PDF "
-            "is available.\n\n"
-            f"🔗 {pdf_url}"
+        print(
+            "PDF is not available yet."
         )
 
-        send_telegram(message)
+        return
 
-    else:
+    print(
+        "\nOfficial Basis of Allotment "
+        "PDF detected."
+    )
 
-        print("PDF is not available yet.")
+    if already_alerted(pdf_url):
+
+        print(
+            "Already alerted previously. "
+            "No Telegram message sent."
+        )
+
+        return
+
+    message = (
+        "🚨 IPO ALLOTMENT DOCUMENT PUBLISHED\n\n"
+        "IPO: Manika Plastech Limited\n"
+        "Registrar: MUFG Intime\n\n"
+        "The official Basis of Allotment "
+        "PDF is now available.\n\n"
+        "This confirms publication of the "
+        "official allotment document; it "
+        "does not by itself confirm your "
+        "individual allotment.\n\n"
+        f"🔗 {pdf_url}"
+    )
+
+    send_telegram(message)
+
+    save_state(pdf_url)
+
+    print(
+        "Alert state saved successfully."
+    )
 
 
 if __name__ == "__main__":
