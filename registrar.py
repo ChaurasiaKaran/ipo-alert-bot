@@ -1,12 +1,47 @@
+import os
 import asyncio
+import requests
+
 from playwright.async_api import async_playwright
 
-URL = "https://in.mpms.mufg.com/Initial_Offer/public-issues.html"
+
+TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+
+BASE_URL = "https://in.mpms.mufg.com"
+
+URL = (
+    "https://in.mpms.mufg.com/"
+    "Initial_Offer/public-issues.html"
+)
 
 COMPANY_VALUE = "11937"
 
+PDF_PATH = (
+    "/Initial_Offer/PDF/"
+    "11937/BasisOfAllotment.pdf"
+)
 
-async def inspect_allotment():
+
+def send_telegram(message):
+
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+
+    response = requests.post(
+        url,
+        data={
+            "chat_id": CHAT_ID,
+            "text": message
+        },
+        timeout=30
+    )
+
+    response.raise_for_status()
+
+    print("Telegram notification sent.")
+
+
+async def get_pdf_url():
 
     async with async_playwright() as p:
 
@@ -16,25 +51,6 @@ async def inspect_allotment():
 
         page = await browser.new_page()
 
-        # Monitor relevant network requests
-        def log_request(request):
-            if "ipo.aspx" in request.url.lower():
-                print(
-                    f"REQUEST: {request.method} {request.url}"
-                )
-
-        def log_response(response):
-            if "ipo.aspx" in response.url.lower():
-                print(
-                    f"RESPONSE: {response.status} "
-                    f"{response.url}"
-                )
-
-        page.on("request", log_request)
-        page.on("response", log_response)
-
-        print("\n--- OPENING MUFG WEBSITE ---")
-
         await page.goto(
             URL,
             wait_until="networkidle",
@@ -43,96 +59,119 @@ async def inspect_allotment():
 
         await page.wait_for_timeout(3000)
 
-        print("\n--- SELECTING MANIKA PLASTECH ---")
-
         company = page.locator("#ddlCompany")
-
-        print(
-            "Company dropdown count:",
-            await company.count()
-        )
-
-        if await company.count() == 0:
-
-            print("Company dropdown not found.")
-
-            await browser.close()
-            return
 
         await company.select_option(COMPANY_VALUE)
 
-        print("Manika Plastech selected.")
-
         await page.wait_for_timeout(5000)
-
-        print("\n--- BASIS OF ALLOTMENT ---")
 
         basis = page.locator("#basisOfAllotment")
 
-        print(
-            "Element count:",
-            await basis.count()
-        )
+        if await basis.count() == 0:
 
-        if await basis.count():
+            print("Basis of Allotment element not found.")
 
-            print(
-                "Visible:",
-                await basis.is_visible()
-            )
+            await browser.close()
 
-            print(
-                "Href:",
-                await basis.get_attribute("href")
-            )
+            return None
 
-            print(
-                "Style:",
-                await basis.get_attribute("style")
-            )
+        href = await basis.get_attribute("href")
 
-            print(
-                "HTML:",
-                await basis.evaluate(
-                    "(el) => el.outerHTML"
-                )
-            )
+        visible = await basis.is_visible()
 
-            if await basis.is_visible():
-
-                print("Basis link is visible.")
-
-                href = await basis.get_attribute("href")
-
-                if href and href != "#":
-
-                    print(
-                        "Allotment URL:",
-                        href
-                    )
-
-                else:
-
-                    print(
-                        "Link has no usable URL yet."
-                    )
-
-            else:
-
-                print(
-                    "Basis link is hidden. "
-                    "No click attempted."
-                )
-
-        print("\n--- PAGE CONTENT ---")
-
-        text = await page.locator("body").inner_text()
-
-        print(text[:10000])
+        print("Visible:", visible)
+        print("PDF path:", href)
 
         await browser.close()
+
+        if visible and href and href != "#":
+
+            return BASE_URL + href
+
+        return None
+
+
+def check_pdf(pdf_url):
+
+    print("\nChecking PDF availability...")
+
+    response = requests.get(
+        pdf_url,
+        timeout=30,
+        headers={
+            "User-Agent": "Mozilla/5.0"
+        }
+    )
+
+    print("HTTP status:", response.status_code)
+
+    print(
+        "Content type:",
+        response.headers.get("Content-Type")
+    )
+
+    print(
+        "File size:",
+        len(response.content),
+        "bytes"
+    )
+
+    if response.status_code != 200:
+
+        return False
+
+    content_type = response.headers.get(
+        "Content-Type",
+        ""
+    ).lower()
+
+    if "pdf" not in content_type:
+
+        print("Response is not a PDF.")
+
+        return False
+
+    if not response.content.startswith(b"%PDF"):
+
+        print("Downloaded content is not a valid PDF.")
+
+        return False
+
+    return True
+
+
+async def main():
+
+    pdf_url = await get_pdf_url()
+
+    if not pdf_url:
+
+        print("Basis of Allotment PDF is not available.")
+
+        return
+
+    print("\nPDF URL:", pdf_url)
+
+    available = check_pdf(pdf_url)
+
+    if available:
+
+        message = (
+            "🚨 BASIS OF ALLOTMENT AVAILABLE\n\n"
+            "IPO: Manika Plastech Limited\n"
+            "Registrar: MUFG Intime\n\n"
+            "The official Basis of Allotment PDF "
+            "is available.\n\n"
+            f"🔗 {pdf_url}"
+        )
+
+        send_telegram(message)
+
+    else:
+
+        print("PDF is not available yet.")
 
 
 if __name__ == "__main__":
 
-    asyncio.run(inspect_allotment())
+    asyncio.run(main())
