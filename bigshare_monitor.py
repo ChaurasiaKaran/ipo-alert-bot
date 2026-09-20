@@ -1,4 +1,3 @@
-import os
 import asyncio
 
 from playwright.async_api import async_playwright
@@ -29,26 +28,27 @@ async def check_bigshare():
 
         print("Page title:", await page.title())
 
-        # Check actual form controls rather than
-        # relying on exact visible text.
+        input_count = await page.locator(
+            "input"
+        ).count()
 
         select_count = await page.locator(
             "select"
         ).count()
 
-        input_count = await page.locator(
-            "input"
-        ).count()
-
         button_count = await page.locator(
-            "button, input[type='button'], "
-            "input[type='submit']"
+            "button, input[type='button'], input[type='submit']"
         ).count()
 
-        print(
-            "Select elements:",
-            select_count
-        )
+        captcha_count = await page.get_by_text(
+            "Enter Captcha",
+            exact=False
+        ).count()
+
+        search_count = await page.get_by_text(
+            "SEARCH",
+            exact=False
+        ).count()
 
         print(
             "Input elements:",
@@ -56,45 +56,30 @@ async def check_bigshare():
         )
 
         print(
+            "Select elements:",
+            select_count
+        )
+
+        print(
             "Button elements:",
             button_count
         )
 
-        body = await page.locator(
-            "body"
-        ).inner_text()
+        print(
+            "Captcha indicator:",
+            captcha_count > 0
+        )
 
-        checks = {
-            "Application Number":
-                "application" in body.lower(),
-
-            "PAN":
-                "pan" in body.lower(),
-
-            "Captcha":
-                "captcha" in body.lower(),
-
-            "Search":
-                "search" in body.lower(),
-
-            "Alloted":
-                "alloted" in body.lower()
-        }
-
-        print("\nBigshare portal checks:")
-
-        for name, result in checks.items():
-
-            print(
-                f"{name}:",
-                result
-            )
+        print(
+            "Search indicator:",
+            search_count > 0
+        )
 
         if (
-            checks["Application Number"]
-            and checks["PAN"]
-            and checks["Captcha"]
-            and checks["Search"]
+            input_count > 0
+            and select_count > 0
+            and captcha_count > 0
+            and search_count > 0
         ):
 
             print(
@@ -106,7 +91,7 @@ async def check_bigshare():
 
             print(
                 "\nBigshare portal structure "
-                "needs further inspection."
+                "needs inspection."
             )
 
         await browser.close()
@@ -115,7 +100,6 @@ async def check_bigshare():
 async def main():
 
     try:
-
         await check_bigshare()
 
     except Exception as error:
@@ -127,5 +111,4 @@ async def main():
 
 
 if __name__ == "__main__":
-
     asyncio.run(main())
