@@ -278,4 +278,4 @@ async def inspect_bigshare():
             )
 
             combined = (
-                f"{text} {href
+                f"{text} href
