@@ -12,6 +12,7 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          IPO_PAN: ${{ secrets.IPO_PAN }}
 
         run: |
           curl -s -X POST \
