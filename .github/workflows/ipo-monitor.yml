@@ -1,7 +1,17 @@
 name: IPO Monitor
 
 on:
+  schedule:
+    - cron: "*/5 * * * *"
+
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ipo-monitor
+  cancel-in-progress: true
 
 jobs:
   monitor:
@@ -16,7 +26,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: |
           pip install -r requirements.txt
 
@@ -24,9 +34,20 @@ jobs:
         run: |
           playwright install --with-deps chromium
 
-      - name: Run IPO checker
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - name: Run IPO monitor
         run: |
           python registrar.py
+
+      - name: Save alert state
+        run: |
+          git config user.name "IPO Alert Bot"
+          git config user.email "actions@github.com"
+
+          git add manika_state.txt
+
+          if git diff --cached --quiet; then
+            echo "No state changes to commit."
+          else
+            git commit -m "Update IPO alert state"
+            git push
+          fi
