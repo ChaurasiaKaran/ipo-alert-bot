@@ -28,78 +28,77 @@ async def main():
 
         company = page.locator("#drpCompany")
 
-        options = company.locator("option")
-
-        count = await options.count()
-
         print(
             "Company options:",
-            count
+            await company.locator("option").count()
         )
 
-        # Use the first actual company.
-        option = options.nth(1)
+        # Inspect the select element itself.
+        print("\nCompany dropdown attributes:")
 
-        company_name = (
-            await option.inner_text()
-        ).strip()
-
-        company_value = await option.get_attribute(
+        for attr in [
+            "id",
+            "name",
+            "onchange",
+            "class",
             "value"
-        )
-
-        print(
-            "\nSelecting:",
-            company_name
-        )
-
-        print(
-            "Value:",
-            company_value
-        )
-
-        # Capture network requests while the
-        # company is selected.
-        requests_seen = []
-
-        def record_request(request):
-
-            url = request.url
-
-            if (
-                "cameo" in url.lower()
-                or "ipo" in url.lower()
-                or "status" in url.lower()
-            ):
-
-                requests_seen.append(
-                    (
-                        request.method,
-                        url
-                    )
-                )
-
-        page.on(
-            "request",
-            record_request
-        )
-
-        await company.select_option(
-            company_value
-        )
-
-        await page.wait_for_timeout(5000)
-
-        print("\nRequests observed:")
-
-        for method, url in requests_seen:
+        ]:
 
             print(
-                method,
-                url
+                attr + ":",
+                await company.get_attribute(attr)
             )
 
-        # Check the Basis link.
+        # Inspect the surrounding form.
+        form = company.locator(
+            "xpath=ancestor::form"
+        ).first
+
+        print("\nForm information:")
+
+        print(
+            "Form count:",
+            await company.locator(
+                "xpath=ancestor::form"
+            ).count()
+        )
+
+        if await form.count():
+
+            print(
+                "Action:",
+                await form.get_attribute("action")
+            )
+
+            print(
+                "Method:",
+                await form.get_attribute("method")
+            )
+
+        # Inspect scripts containing the dropdown ID.
+        scripts = page.locator("script")
+
+        print(
+            "\nSearching page scripts..."
+        )
+
+        for i in range(await scripts.count()):
+
+            text = await scripts.nth(i).inner_text()
+
+            if (
+                "drpCompany" in text
+                or "Basis" in text
+                or "Allotment" in text
+            ):
+
+                print(
+                    "\n--- SCRIPT", i, "---"
+                )
+
+                print(text[:8000])
+
+        # Inspect the hidden Basis link.
         basis = page.get_by_text(
             "CLICK TO VIEW BASIS OF ALLOTMENT",
             exact=True
@@ -110,65 +109,28 @@ async def main():
             await basis.count()
         )
 
-        if await basis.count() > 0:
-
-            print(
-                "Basis link found."
-            )
+        if await basis.count():
 
             print(
                 "Visible:",
                 await basis.is_visible()
             )
 
-            # Capture popup/new-page events.
-            try:
-
-                async with page.expect_popup(
-                    timeout=5000
-                ) as popup_info:
-
-                    await basis.click()
-
-                popup = await popup_info.value
-
-                await popup.wait_for_load_state(
-                    "domcontentloaded"
+            print(
+                "Tag:",
+                await basis.evaluate(
+                    "(el) => el.tagName"
                 )
-
-                print(
-                    "\nBasis link opened a new page."
-                )
-
-                print(
-                    "Popup URL:",
-                    popup.url
-                )
-
-                print(
-                    "Popup title:",
-                    await popup.title()
-                )
-
-                await popup.close()
-
-            except Exception:
-
-                print(
-                    "\nBasis link did not open "
-                    "a popup."
-                )
-
-                print(
-                    "Checking current page URL:"
-                )
-
-                print(page.url)
-
-        else:
+            )
 
             print(
-                "Basis link not found."
+                "Outer HTML:"
+            )
+
+            print(
+                await basis.evaluate(
+                    "(el) => el.outerHTML"
+                )
             )
 
         await browser.close()
