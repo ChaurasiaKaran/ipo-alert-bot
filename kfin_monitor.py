@@ -97,10 +97,10 @@ def save_state(state):
 
 
 # ============================================================
-# EXTRACT JAVASCRIPT BUNDLES
+# GET JAVASCRIPT BUNDLE URL
 # ============================================================
 
-async def get_script_urls(page):
+async def get_bundle_url(page):
 
     scripts = await page.locator(
         "script[src]"
@@ -112,140 +112,69 @@ async def get_script_urls(page):
         """
     )
 
-    unique = []
-
     for url in scripts:
 
-        if url not in unique:
+        if "static/js/" in url:
 
-            unique.append(url)
+            print()
+            print(
+                "KFin JavaScript bundle:"
+            )
 
-    print()
-    print(
-        "JavaScript bundles found:",
-        len(unique)
-    )
+            print(url)
 
-    for url in unique:
+            return url
 
-        print(url)
-
-    return unique
+    return None
 
 
 # ============================================================
-# DOWNLOAD BUNDLES
+# DOWNLOAD BUNDLE
 # ============================================================
 
 def download_bundle(url):
 
-    try:
-
-        response = requests.get(
-            url,
-            timeout=30,
-            headers={
-                "User-Agent":
-                    "Mozilla/5.0"
-            }
-        )
-
-        response.raise_for_status()
-
-        print(
-            "Downloaded bundle:",
-            url,
-            "size:",
-            len(response.text)
-        )
-
-        return response.text
-
-    except Exception as error:
-
-        print(
-            "Could not download:",
-            url
-        )
-
-        print(error)
-
-        return ""
-
-
-# ============================================================
-# FIND POSSIBLE KFIN API URLS
-# ============================================================
-
-def find_api_urls(bundle):
-
-    patterns = [
-
-        r'https?://[^"\']+',
-
-        r'["\']([^"\']*?/prod/api/[^"\']*)["\']',
-
-        r'["\']([^"\']*?/api/[^"\']*)["\']',
-
-    ]
-
-    found = set()
-
-    for pattern in patterns:
-
-        try:
-
-            matches = re.findall(
-                pattern,
-                bundle
-            )
-
-            for match in matches:
-
-                if isinstance(match, tuple):
-
-                    for item in match:
-
-                        if item:
-                            found.add(item)
-
-                else:
-
-                    found.add(match)
-
-        except Exception:
-            continue
-
-    # Only retain useful-looking API references.
-    useful = []
-
-    for item in found:
-
-        lower = item.lower()
-
-        if (
-            "/api/" in lower
-            or "ipo" in lower
-            or "query" in lower
-            or "company" in lower
-        ):
-
-            useful.append(item)
-
-    return sorted(
-        set(useful)
+    print()
+    print(
+        "Downloading KFin bundle..."
     )
 
+    response = requests.get(
+        url,
+        timeout=30,
+        headers={
+            "User-Agent":
+                "Mozilla/5.0"
+        }
+    )
+
+    response.raise_for_status()
+
+    print(
+        "Bundle downloaded."
+    )
+
+    print(
+        "Bundle size:",
+        len(response.text)
+    )
+
+    return response.text
+
 
 # ============================================================
-# FIND COMPANY / IPO DATA STRINGS
+# EXTRACT IPO NAMES
 # ============================================================
 
-def find_company_like_strings(bundle):
+def extract_ipo_names(bundle):
 
-    results = set()
+    names = set()
 
-    # Look for common JSON/object field names.
+    # --------------------------------------------------------
+    # KFin's current bundle contains IPO names as JSON-style
+    # strings. Look for common name fields.
+    # --------------------------------------------------------
+
     patterns = [
 
         r'"(?:companyName|company_name|ipoName|ipo_name|name)"\s*:\s*"([^"]+)"',
@@ -256,53 +185,114 @@ def find_company_like_strings(bundle):
 
     for pattern in patterns:
 
-        try:
+        matches = re.findall(
+            pattern,
+            bundle
+        )
 
-            matches = re.findall(
-                pattern,
-                bundle
-            )
+        for match in matches:
 
-            for match in matches:
+            name = match.strip()
 
-                text = match.strip()
+            if not name:
+                continue
 
-                if len(text) < 3:
-                    continue
+            names.add(name)
 
-                lower = text.lower()
+    # --------------------------------------------------------
+    # Also detect IPO-like uppercase strings embedded in the
+    # application's data.
+    # --------------------------------------------------------
 
-                # Avoid generic UI strings.
-                if lower in {
-                    "select ipo",
-                    "select",
-                    "submit",
-                    "pan",
-                    "application no",
-                    "demat account",
-                }:
-                    continue
-
-                results.add(text)
-
-        except Exception:
-            continue
-
-    return sorted(
-        results
+    uppercase_pattern = (
+        r'"([A-Z][A-Z0-9&().,\- /]{5,100}'
+        r'(?:LIMITED|LTD|IPO|SME|REIT|INVIT|NCD)[^"]*)"'
     )
 
+    try:
+
+        matches = re.findall(
+            uppercase_pattern,
+            bundle
+        )
+
+        for match in matches:
+
+            name = match.strip()
+
+            if name:
+
+                names.add(name)
+
+    except Exception:
+        pass
+
+    try:
+
+        matches = re.findall(
+            uppercase_pattern,
+            bundle
+        )
+
+        for match in matches:
+
+            name = match.strip()
+
+            if name:
+
+                names.add(name)
+
+    except Exception:
+        pass
+
+    # --------------------------------------------------------
+    # Remove obvious non-IPO UI text.
+    # --------------------------------------------------------
+
+    excluded = {
+        "SELECT IPO",
+        "SELECT",
+        "SUBMIT",
+        "APPLICATION NO",
+        "DEMAT ACCOUNT",
+        "PAN",
+        "ENTER PAN NO",
+        "ENTER APPLICATION NO",
+        "ENTER DEMAT ACCOUNT",
+    }
+
+    cleaned = set()
+
+    for name in names:
+
+        if name.upper() in excluded:
+            continue
+
+        if len(name) < 5:
+            continue
+
+        cleaned.add(name)
+
+    return cleaned
+
 
 # ============================================================
-# MAIN INSPECTION
+# MAIN MONITOR
 # ============================================================
 
-async def inspect_kfin():
+async def monitor_kfin():
+
+    state = load_state()
 
     print()
-    print("=" * 60)
-    print("KFINTECH SPA INSPECTION")
-    print("=" * 60)
+    print(
+        "Previously detected KFin IPOs:",
+        len(state)
+    )
+
+    # --------------------------------------------------------
+    # Open official KFin page
+    # --------------------------------------------------------
 
     async with async_playwright() as p:
 
@@ -328,7 +318,7 @@ async def inspect_kfin():
             )
 
         await page.wait_for_timeout(
-            5000
+            3000
         )
 
         print()
@@ -337,130 +327,183 @@ async def inspect_kfin():
             await page.title()
         )
 
-        print()
-        print(
-            "Visible page text:"
-        )
-
-        try:
-
-            text = (
-                await page.locator(
-                    "body"
-                ).inner_text()
-            )
-
-            print(
-                text[:5000]
-            )
-
-        except Exception as error:
-
-            print(
-                "Could not read page text:",
-                error
-            )
-
-        script_urls = await get_script_urls(
+        bundle_url = await get_bundle_url(
             page
         )
 
         await browser.close()
 
+    if not bundle_url:
+
+        raise RuntimeError(
+            "Could not find KFin JavaScript bundle."
+        )
+
     # --------------------------------------------------------
-    # Inspect bundles
+    # Download and inspect bundle
     # --------------------------------------------------------
 
-    all_api_urls = set()
-    all_company_names = set()
+    bundle = download_bundle(
+        bundle_url
+    )
+
+    ipo_names = extract_ipo_names(
+        bundle
+    )
 
     print()
     print("=" * 60)
-    print("INSPECTING JAVASCRIPT BUNDLES")
+    print("KFIN IPO SUMMARY")
     print("=" * 60)
 
-    for url in script_urls:
+    print(
+        "IPO names detected:",
+        len(ipo_names)
+    )
 
-        bundle = download_bundle(
-            url
-        )
-
-        if not bundle:
-            continue
-
-        api_urls = find_api_urls(
-            bundle
-        )
-
-        company_names = (
-            find_company_like_strings(
-                bundle
-            )
-        )
-
-        for item in api_urls:
-
-            all_api_urls.add(
-                item
-            )
-
-        for item in company_names:
-
-            all_company_names.add(
-                item
-            )
-
-    # --------------------------------------------------------
-    # Print API references
-    # --------------------------------------------------------
-
-    print()
-    print("=" * 60)
-    print("KFIN API REFERENCES FOUND")
-    print("=" * 60)
-
-    if all_api_urls:
-
-        for url in sorted(
-            all_api_urls
-        ):
-
-            print(url)
-
-    else:
+    for name in sorted(
+        ipo_names
+    ):
 
         print(
-            "No API references found."
+            name
         )
 
     # --------------------------------------------------------
-    # Print company-like strings
+    # Safety check
+    #
+    # If extraction unexpectedly finds nothing, DO NOT modify
+    # the existing state.
     # --------------------------------------------------------
 
-    print()
-    print("=" * 60)
-    print("KFIN COMPANY-LIKE STRINGS")
-    print("=" * 60)
+    if not ipo_names:
 
-    if all_company_names:
-
-        for name in sorted(
-            all_company_names
-        ):
-
-            print(name)
-
-    else:
+        print()
+        print(
+            "No IPO names detected."
+        )
 
         print(
-            "No company names found "
-            "inside the bundles."
+            "Existing state will not be changed."
         )
+
+        return
+
+    # --------------------------------------------------------
+    # First run = baseline
+    # --------------------------------------------------------
+
+    if not state:
+
+        print()
+        print(
+            "First KFin run detected."
+        )
+
+        print(
+            "Saving current IPOs as baseline."
+        )
+
+        for name in ipo_names:
+
+            state.add(name)
+
+        save_state(state)
+
+        print(
+            "Baseline created."
+        )
+
+        print(
+            "No Telegram alerts sent on first run."
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # Detect new IPOs
+    # --------------------------------------------------------
+
+    new_ipos = []
+
+    for name in sorted(
+        ipo_names
+    ):
+
+        if name not in state:
+
+            new_ipos.append(
+                name
+            )
+
+    print()
+    print(
+        "New KFin IPOs:",
+        len(new_ipos)
+    )
+
+    # --------------------------------------------------------
+    # Telegram alerts
+    # --------------------------------------------------------
+
+    for name in new_ipos:
+
+        message = (
+            "🚨 KFIN IPO STATUS UPDATE\n\n"
+            f"IPO: {name}\n\n"
+            "This IPO has appeared in the "
+            "official KFin IPO status service.\n\n"
+            f"KFin status page:\n"
+            f"{KFIN_URL}"
+        )
+
+        try:
+
+            send_telegram(
+                message
+            )
+
+            state.add(
+                name
+            )
+
+            save_state(
+                state
+            )
+
+        except Exception as error:
+
+            print()
+            print(
+                "Telegram error:"
+            )
+
+            print(error)
+
+    # --------------------------------------------------------
+    # Save all currently detected names
+    # --------------------------------------------------------
+
+    for name in ipo_names:
+
+        state.add(name)
+
+    save_state(state)
 
     print()
     print("=" * 60)
-    print("KFIN INSPECTION FINISHED")
+    print("KFIN MONITOR FINISHED")
     print("=" * 60)
+
+    print(
+        "New alerts:",
+        len(new_ipos)
+    )
+
+    print(
+        "Saved IPOs:",
+        len(state)
+    )
 
 
 # ============================================================
@@ -471,13 +514,13 @@ async def main():
 
     try:
 
-        await inspect_kfin()
+        await monitor_kfin()
 
     except Exception as error:
 
         print()
         print(
-            "KFin inspection failed:"
+            "KFin monitor failed:"
         )
 
         print(error)
