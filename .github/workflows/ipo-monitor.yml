@@ -35,6 +35,9 @@ jobs:
           playwright install --with-deps chromium
 
       - name: Run IPO monitor
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python registrar.py
 
