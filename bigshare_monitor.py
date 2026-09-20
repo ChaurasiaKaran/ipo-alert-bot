@@ -1,32 +1,10 @@
 import os
 import asyncio
-import requests
 
 from playwright.async_api import async_playwright
 
 
-TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
-
 BIGSHARE_URL = "https://ipo.bigshareonline.com/"
-
-
-def send_telegram(message):
-
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-
-    response = requests.post(
-        url,
-        data={
-            "chat_id": CHAT_ID,
-            "text": message
-        },
-        timeout=30
-    )
-
-    response.raise_for_status()
-
-    print("Telegram notification sent.")
 
 
 async def check_bigshare():
@@ -49,46 +27,86 @@ async def check_bigshare():
 
         await page.wait_for_timeout(5000)
 
-        title = await page.title()
+        print("Page title:", await page.title())
 
-        print("Page title:", title)
+        # Check actual form controls rather than
+        # relying on exact visible text.
 
-        body = await page.locator("body").inner_text()
+        select_count = await page.locator(
+            "select"
+        ).count()
 
-        print("\nBigshare page loaded successfully.")
+        input_count = await page.locator(
+            "input"
+        ).count()
 
-        indicators = [
-            "Enter Application Number",
-            "Enter PAN Number",
-            "Enter Captcha",
-            "SEARCH",
-            "Alloted"
-        ]
-
-        found = []
-
-        for indicator in indicators:
-
-            if indicator.lower() in body.lower():
-                found.append(indicator)
+        button_count = await page.locator(
+            "button, input[type='button'], "
+            "input[type='submit']"
+        ).count()
 
         print(
-            "Detected portal elements:",
-            ", ".join(found)
+            "Select elements:",
+            select_count
         )
 
-        if len(found) >= 3:
+        print(
+            "Input elements:",
+            input_count
+        )
+
+        print(
+            "Button elements:",
+            button_count
+        )
+
+        body = await page.locator(
+            "body"
+        ).inner_text()
+
+        checks = {
+            "Application Number":
+                "application" in body.lower(),
+
+            "PAN":
+                "pan" in body.lower(),
+
+            "Captcha":
+                "captcha" in body.lower(),
+
+            "Search":
+                "search" in body.lower(),
+
+            "Alloted":
+                "alloted" in body.lower()
+        }
+
+        print("\nBigshare portal checks:")
+
+        for name, result in checks.items():
 
             print(
-                "Bigshare IPO allotment portal "
-                "is available."
+                f"{name}:",
+                result
+            )
+
+        if (
+            checks["Application Number"]
+            and checks["PAN"]
+            and checks["Captcha"]
+            and checks["Search"]
+        ):
+
+            print(
+                "\nBigshare IPO allotment "
+                "portal is available."
             )
 
         else:
 
             print(
-                "Bigshare portal structure "
-                "may have changed."
+                "\nBigshare portal structure "
+                "needs further inspection."
             )
 
         await browser.close()
