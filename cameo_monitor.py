@@ -3,7 +3,7 @@ import asyncio
 from playwright.async_api import async_playwright
 
 
-CAMEO_URL = "https://cameoindia.com/"
+CAMEO_URL = "https://ipostatus1.cameoindia.com/"
 
 
 async def check_cameo():
@@ -16,11 +16,11 @@ async def check_cameo():
 
         page = await browser.new_page()
 
-        print("Opening Cameo official website...")
+        print("Opening Cameo IPO status portal...")
 
         await page.goto(
             CAMEO_URL,
-            wait_until="domcontentloaded",
+            wait_until="networkidle",
             timeout=60000
         )
 
@@ -28,12 +28,13 @@ async def check_cameo():
 
         print("Page title:", await page.title())
 
-        input_count = await page.locator(
-            "input"
+        # Inspect actual controls
+        select_count = await page.locator(
+            "select"
         ).count()
 
-        link_count = await page.locator(
-            "a"
+        input_count = await page.locator(
+            "input"
         ).count()
 
         button_count = await page.locator(
@@ -41,13 +42,13 @@ async def check_cameo():
         ).count()
 
         print(
-            "Input elements:",
-            input_count
+            "Select elements:",
+            select_count
         )
 
         print(
-            "Link elements:",
-            link_count
+            "Input elements:",
+            input_count
         )
 
         print(
@@ -61,23 +62,23 @@ async def check_cameo():
 
         text = body.lower()
 
-        indicators = {
-            "IPO":
-                "ipo" in text,
+        checks = {
+            "Company":
+                "company" in text,
 
-            "Allotment":
-                "allotment" in text,
+            "Captcha":
+                "captcha" in text,
 
-            "Registrar":
-                "registrar" in text,
+            "Basis of Allotment":
+                "basis of allotment" in text,
 
-            "Investor":
-                "investor" in text
+            "IPO Status":
+                "ipo status" in text
         }
 
-        print("\nCameo portal checks:")
+        print("\nCameo IPO portal checks:")
 
-        for name, result in indicators.items():
+        for name, result in checks.items():
 
             print(
                 f"{name}:",
@@ -85,19 +86,20 @@ async def check_cameo():
             )
 
         if (
-            indicators["IPO"]
-            or indicators["Allotment"]
+            checks["Company"]
+            and checks["Captcha"]
+            and checks["Basis of Allotment"]
         ):
 
             print(
-                "\nCameo IPO-related "
-                "content detected."
+                "\nCameo IPO status portal "
+                "is available."
             )
 
         else:
 
             print(
-                "\nCameo IPO structure "
+                "\nCameo IPO portal structure "
                 "needs further inspection."
             )
 
