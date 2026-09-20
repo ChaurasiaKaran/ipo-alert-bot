@@ -28,79 +28,91 @@ async def check_cameo():
 
         print("Page title:", await page.title())
 
-        # Inspect actual controls
-        select_count = await page.locator(
-            "select"
-        ).count()
-
-        input_count = await page.locator(
-            "input"
-        ).count()
-
-        button_count = await page.locator(
-            "button, input[type='button'], input[type='submit']"
-        ).count()
+        # Select elements
+        selects = page.locator("select")
 
         print(
-            "Select elements:",
-            select_count
+            "\nSelect elements:",
+            await selects.count()
         )
 
-        print(
-            "Input elements:",
-            input_count
-        )
+        for i in range(await selects.count()):
 
-        print(
-            "Button elements:",
-            button_count
-        )
-
-        body = await page.locator(
-            "body"
-        ).inner_text()
-
-        text = body.lower()
-
-        checks = {
-            "Company":
-                "company" in text,
-
-            "Captcha":
-                "captcha" in text,
-
-            "Basis of Allotment":
-                "basis of allotment" in text,
-
-            "IPO Status":
-                "ipo status" in text
-        }
-
-        print("\nCameo IPO portal checks:")
-
-        for name, result in checks.items():
+            select = selects.nth(i)
 
             print(
-                f"{name}:",
-                result
+                f"SELECT {i}:",
+                await select.get_attribute("id"),
+                await select.get_attribute("name")
             )
 
-        if (
-            checks["Company"]
-            and checks["Captcha"]
-            and checks["Basis of Allotment"]
-        ):
+            options = select.locator("option")
 
             print(
-                "\nCameo IPO status portal "
-                "is available."
+                "  Options:",
+                await options.count()
             )
 
-        else:
+            for j in range(
+                min(await options.count(), 10)
+            ):
+
+                option = options.nth(j)
+
+                print(
+                    "   ",
+                    j,
+                    await option.inner_text(),
+                    "| value =",
+                    await option.get_attribute("value")
+                )
+
+        # Inputs
+        inputs = page.locator("input")
+
+        print(
+            "\nInput elements:",
+            await inputs.count()
+        )
+
+        for i in range(await inputs.count()):
+
+            inp = inputs.nth(i)
 
             print(
-                "\nCameo IPO portal structure "
-                "needs further inspection."
+                f"INPUT {i}:",
+                "type=",
+                await inp.get_attribute("type"),
+                "id=",
+                await inp.get_attribute("id"),
+                "name=",
+                await inp.get_attribute("name"),
+                "value=",
+                await inp.get_attribute("value")
+            )
+
+        # Buttons
+        buttons = page.locator(
+            "button, input[type='button'], "
+            "input[type='submit']"
+        )
+
+        print(
+            "\nButton elements:",
+            await buttons.count()
+        )
+
+        for i in range(await buttons.count()):
+
+            button = buttons.nth(i)
+
+            print(
+                f"BUTTON {i}:",
+                await button.inner_text(),
+                "| value=",
+                await button.get_attribute("value"),
+                "| id=",
+                await button.get_attribute("id")
             )
 
         await browser.close()
