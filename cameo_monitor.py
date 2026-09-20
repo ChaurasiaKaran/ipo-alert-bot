@@ -14,29 +14,22 @@ async def main():
         options = await page.locator("#drpCompany option").all()
         print(f"Company options: {len(options)}")
 
-        # Test only the first real company
         for option in options:
             value = await option.get_attribute("value")
             text = (await option.inner_text()).strip()
 
-            if not value:
+            # Skip placeholder
+            if not value or value == "0":
                 continue
 
             print(f"\nTesting: {text}")
             print(f"Value: {value}")
 
             await page.select_option("#drpCompany", value=value)
-
-            print("Selected dropdown.")
-
-            # The site's onchange calls GetMaster1Details()
             await page.evaluate("GetMaster1Details()")
-
-            print("Called GetMaster1Details().")
 
             button = page.locator("#view_button")
 
-            print("Button count:", await button.count())
             print("Button display:",
                   await button.evaluate("(el) => el.style.display"))
             print("Button href:",
