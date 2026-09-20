@@ -14,28 +14,30 @@ async def main():
         options = await page.locator("#drpCompany option").all()
         print(f"Company options: {len(options)}")
 
+        print("\nChecking all companies...\n")
+
         for option in options:
             value = await option.get_attribute("value")
             text = (await option.inner_text()).strip()
 
-            # Skip placeholder
             if not value or value == "0":
                 continue
-
-            print(f"\nTesting: {text}")
-            print(f"Value: {value}")
 
             await page.select_option("#drpCompany", value=value)
             await page.evaluate("GetMaster1Details()")
 
             button = page.locator("#view_button")
 
-            print("Button display:",
-                  await button.evaluate("(el) => el.style.display"))
-            print("Button href:",
-                  await button.get_attribute("href"))
+            display = await button.evaluate(
+                "(el) => getComputedStyle(el).display"
+            )
+            href = await button.get_attribute("href")
 
-            break
+            print(f"{value:5} | {text}")
+
+            if display != "none" or href:
+                print(f"      >>> BASIS AVAILABLE")
+                print(f"      >>> href: {href}")
 
         await browser.close()
 
