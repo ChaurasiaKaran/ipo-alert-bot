@@ -6,7 +6,7 @@ from playwright.async_api import async_playwright
 BIGSHARE_URL = "https://ipo.bigshareonline.com/"
 
 
-async def check_bigshare():
+async def inspect_bigshare():
 
     async with async_playwright() as p:
 
@@ -16,7 +16,9 @@ async def check_bigshare():
 
         page = await browser.new_page()
 
-        print("Opening Bigshare IPO status page...")
+        print("=" * 70)
+        print("OPENING BIGSHARE IPO STATUS PAGE")
+        print("=" * 70)
 
         await page.goto(
             BIGSHARE_URL,
@@ -26,89 +28,254 @@ async def check_bigshare():
 
         await page.wait_for_timeout(5000)
 
-        print("Page title:", await page.title())
+        print()
+        print("Page title:")
+        print(await page.title())
 
-        input_count = await page.locator(
-            "input"
-        ).count()
+        print()
+        print("=" * 70)
+        print("SELECT ELEMENTS")
+        print("=" * 70)
 
-        select_count = await page.locator(
-            "select"
-        ).count()
+        selects = page.locator("select")
 
-        button_count = await page.locator(
-            "button, input[type='button'], input[type='submit']"
-        ).count()
+        select_count = await selects.count()
 
-        captcha_count = await page.get_by_text(
-            "Enter Captcha",
-            exact=False
-        ).count()
+        print("Total selects:", select_count)
 
-        search_count = await page.get_by_text(
-            "SEARCH",
-            exact=False
-        ).count()
+        for i in range(select_count):
+
+            select = selects.nth(i)
+
+            print()
+            print(f"SELECT #{i + 1}")
+
+            print(
+                "id:",
+                await select.get_attribute("id")
+            )
+
+            print(
+                "name:",
+                await select.get_attribute("name")
+            )
+
+            options = select.locator("option")
+
+            option_count = await options.count()
+
+            print(
+                "options:",
+                option_count
+            )
+
+            for j in range(
+                min(option_count, 50)
+            ):
+
+                option = options.nth(j)
+
+                value = await option.get_attribute(
+                    "value"
+                )
+
+                text = (
+                    await option.inner_text()
+                ).strip()
+
+                print(
+                    f"  {j + 1}. "
+                    f"value={value!r} "
+                    f"text={text!r}"
+                )
+
+        print()
+        print("=" * 70)
+        print("INPUT ELEMENTS")
+        print("=" * 70)
+
+        inputs = page.locator("input")
+
+        input_count = await inputs.count()
 
         print(
-            "Input elements:",
+            "Total inputs:",
             input_count
         )
 
-        print(
-            "Select elements:",
-            select_count
+        for i in range(input_count):
+
+            element = inputs.nth(i)
+
+            print()
+            print(f"INPUT #{i + 1}")
+
+            print(
+                "type:",
+                await element.get_attribute("type")
+            )
+
+            print(
+                "id:",
+                await element.get_attribute("id")
+            )
+
+            print(
+                "name:",
+                await element.get_attribute("name")
+            )
+
+            print(
+                "placeholder:",
+                await element.get_attribute(
+                    "placeholder"
+                )
+            )
+
+        print()
+        print("=" * 70)
+        print("BUTTONS")
+        print("=" * 70)
+
+        buttons = page.locator(
+            "button, input[type='button'], "
+            "input[type='submit'], a"
         )
 
+        button_count = await buttons.count()
+
         print(
-            "Button elements:",
+            "Total button/link elements:",
             button_count
         )
 
-        print(
-            "Captcha indicator:",
-            captcha_count > 0
-        )
+        for i in range(button_count):
 
-        print(
-            "Search indicator:",
-            search_count > 0
-        )
+            element = buttons.nth(i)
 
-        if (
-            input_count > 0
-            and select_count > 0
-            and captcha_count > 0
-            and search_count > 0
-        ):
+            text = (
+                await element.inner_text()
+            ).strip()
 
-            print(
-                "\nBigshare IPO allotment "
-                "portal is available."
+            value = await element.get_attribute(
+                "value"
             )
 
-        else:
-
-            print(
-                "\nBigshare portal structure "
-                "needs inspection."
+            href = await element.get_attribute(
+                "href"
             )
 
-        await browser.close()
+            element_id = await element.get_attribute(
+                "id"
+            )
 
+            if (
+                text
+                or value
+                or href
+            ):
 
-async def main():
+                print()
 
-    try:
-        await check_bigshare()
+                print(
+                    f"ELEMENT #{i + 1}"
+                )
 
-    except Exception as error:
+                print(
+                    "tag:",
+                    await element.evaluate(
+                        "(el) => el.tagName"
+                    )
+                )
 
-        print(
-            "Bigshare monitor error:",
-            error
-        )
+                print(
+                    "id:",
+                    element_id
+                )
 
+                print(
+                    "text:",
+                    text
+                )
 
-if __name__ == "__main__":
-    asyncio.run(main())
+                print(
+                    "value:",
+                    value
+                )
+
+                print(
+                    "href:",
+                    href
+                )
+
+        print()
+        print("=" * 70)
+        print("IMPORTANT PAGE TEXT")
+        print("=" * 70)
+
+        body_text = await page.locator(
+            "body"
+        ).inner_text()
+
+        lines = [
+            line.strip()
+            for line in body_text.splitlines()
+            if line.strip()
+        ]
+
+        keywords = [
+            "allot",
+            "basis",
+            "ipo",
+            "status",
+            "company",
+            "captcha",
+            "application",
+            "pan",
+            "search",
+            "download",
+            "result"
+        ]
+
+        found_lines = []
+
+        for line in lines:
+
+            lower_line = line.lower()
+
+            if any(
+                keyword in lower_line
+                for keyword in keywords
+            ):
+
+                if line not in found_lines:
+
+                    found_lines.append(line)
+
+        for line in found_lines[:150]:
+
+            print(line)
+
+        print()
+        print("=" * 70)
+        print("LINKS CONTAINING IMPORTANT KEYWORDS")
+        print("=" * 70)
+
+        links = page.locator("a")
+
+        link_count = await links.count()
+
+        for i in range(link_count):
+
+            link = links.nth(i)
+
+            text = (
+                await link.inner_text()
+            ).strip()
+
+            href = await link.get_attribute(
+                "href"
+            )
+
+            combined = (
+                f"{text} {href
