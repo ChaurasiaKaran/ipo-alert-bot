@@ -38,7 +38,6 @@ async def inspect_bigshare():
         print("=" * 70)
 
         selects = page.locator("select")
-
         select_count = await selects.count()
 
         print("Total selects:", select_count)
@@ -61,7 +60,6 @@ async def inspect_bigshare():
             )
 
             options = select.locator("option")
-
             option_count = await options.count()
 
             print(
@@ -95,7 +93,6 @@ async def inspect_bigshare():
         print("=" * 70)
 
         inputs = page.locator("input")
-
         input_count = await inputs.count()
 
         print(
@@ -134,24 +131,26 @@ async def inspect_bigshare():
 
         print()
         print("=" * 70)
-        print("BUTTONS")
+        print("BUTTONS AND LINKS")
         print("=" * 70)
 
-        buttons = page.locator(
-            "button, input[type='button'], "
-            "input[type='submit'], a"
+        elements = page.locator(
+            "button, "
+            "input[type='button'], "
+            "input[type='submit'], "
+            "a"
         )
 
-        button_count = await buttons.count()
+        element_count = await elements.count()
 
         print(
-            "Total button/link elements:",
-            button_count
+            "Total elements:",
+            element_count
         )
 
-        for i in range(button_count):
+        for i in range(element_count):
 
-            element = buttons.nth(i)
+            element = elements.nth(i)
 
             text = (
                 await element.inner_text()
@@ -169,14 +168,9 @@ async def inspect_bigshare():
                 "id"
             )
 
-            if (
-                text
-                or value
-                or href
-            ):
+            if text or value or href:
 
                 print()
-
                 print(
                     f"ELEMENT #{i + 1}"
                 )
@@ -258,11 +252,10 @@ async def inspect_bigshare():
 
         print()
         print("=" * 70)
-        print("LINKS CONTAINING IMPORTANT KEYWORDS")
+        print("IMPORTANT LINKS")
         print("=" * 70)
 
         links = page.locator("a")
-
         link_count = await links.count()
 
         for i in range(link_count):
@@ -278,4 +271,59 @@ async def inspect_bigshare():
             )
 
             combined = (
-                f"{text} href
+                text
+                + " "
+                + (href or "")
+            ).lower()
+
+            if any(
+                keyword in combined
+                for keyword in [
+                    "allot",
+                    "basis",
+                    "ipo",
+                    "status",
+                    "result",
+                    "download"
+                ]
+            ):
+
+                print()
+                print(
+                    "Text:",
+                    text
+                )
+
+                print(
+                    "Href:",
+                    href
+                )
+
+        print()
+        print("=" * 70)
+        print("INSPECTION FINISHED")
+        print("=" * 70)
+
+        await browser.close()
+
+
+async def main():
+
+    try:
+
+        await inspect_bigshare()
+
+    except Exception as error:
+
+        print()
+        print(
+            "Bigshare inspection error:",
+            error
+        )
+
+        raise
+
+
+if __name__ == "__main__":
+
+    asyncio.run(main())
