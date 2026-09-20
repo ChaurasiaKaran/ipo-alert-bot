@@ -4,7 +4,7 @@ from playwright.async_api import async_playwright
 URL = "https://in.mpms.mufg.com/Initial_Offer/public-issues.html"
 
 
-async def inspect_logic():
+async def inspect_allotment():
 
     async with async_playwright() as p:
 
@@ -14,6 +14,37 @@ async def inspect_logic():
 
         page = await browser.new_page()
 
+        # Log requests and responses related to allotment
+        page.on(
+            "request",
+            lambda request: (
+                print(
+                    f"REQUEST: {request.method} "
+                    f"{request.url}"
+                )
+            )
+            if any(
+                word in request.url.lower()
+                for word in ["allot", "ipo.aspx"]
+            )
+            else None
+        )
+
+        page.on(
+            "response",
+            lambda response: (
+                print(
+                    f"RESPONSE: {response.status} "
+                    f"{response.url}"
+                )
+            )
+            if any(
+                word in response.url.lower()
+                for word in ["allot", "ipo.aspx"]
+            )
+            else None
+        )
+
         await page.goto(
             URL,
             wait_until="networkidle",
@@ -22,7 +53,7 @@ async def inspect_logic():
 
         await page.wait_for_timeout(3000)
 
-        print("\n--- BASIS OF ALLOTMENT LINKS ---")
+        print("\n--- BASIS OF ALLOTMENT ELEMENT ---")
 
         links = page.locator("a")
 
@@ -32,41 +63,40 @@ async def inspect_logic():
 
             text = (await link.inner_text()).strip()
 
-            href = await link.get_attribute("href")
+            if "basis" in text.lower():
 
-            if "allot" in text.lower() or "allot" in str(href).lower():
+                print("Text:", text)
+                print(
+                    "HTML:",
+                    await link.evaluate(
+                        "(el) => el.outerHTML"
+                    )
+                )
 
-                print(f"Text: {text}")
-                print(f"Href: {href}")
-                print()
+        print("\n--- CLICK BASIS OF ALLOTMENT ---")
 
-        print("\n--- SEARCH FUNCTION ---")
+        basis = page.get_by_text(
+            "Basis Of Allotment",
+            exact=True
+        )
 
-        function_info = await page.evaluate("""
-        () => {
-            if (typeof CALLPANSERCH === 'function') {
-                return CALLPANSERCH.toString();
-            }
-            return 'CALLPANSERCH not found';
-        }
-        """)
+        print("Element count:", await basis.count())
 
-        print(function_info)
+        if await basis.count():
 
-        print("\n--- PAGE SCRIPTS ---")
+            await basis.first.click()
 
-        scripts = await page.locator("script").all()
+            await page.wait_for_timeout(3000)
 
-        for i, script in enumerate(scripts):
+            print("\n--- AFTER CLICK ---")
 
-            src = await script.get_attribute("src")
-
-            if src:
-                print(f"Script {i}: {src}")
+            print(
+                (await page.locator("body").inner_text())[:10000]
+            )
 
         await browser.close()
 
 
 if __name__ == "__main__":
 
-    asyncio.run(inspect_logic())
+    asyncio.run(inspect_allotment())
