@@ -4,7 +4,7 @@ from playwright.async_api import async_playwright
 URL = "https://in.mpms.mufg.com/Initial_Offer/public-issues.html"
 
 
-async def inspect_form():
+async def inspect_logic():
 
     async with async_playwright() as p:
 
@@ -22,82 +22,51 @@ async def inspect_form():
 
         await page.wait_for_timeout(3000)
 
-        # Select Manika Plastech
-        await page.locator(
-            'option[value="11937"]'
-        ).locator("xpath=..").select_option("11937")
+        print("\n--- BASIS OF ALLOTMENT LINKS ---")
 
-        await page.wait_for_timeout(2000)
+        links = page.locator("a")
 
-        print("\n--- RADIO OPTIONS ---")
+        for i in range(await links.count()):
 
-        radios = page.locator(
-            'input[type="radio"]'
-        )
+            link = links.nth(i)
 
-        for i in range(await radios.count()):
+            text = (await link.inner_text()).strip()
 
-            radio = radios.nth(i)
+            href = await link.get_attribute("href")
 
-            print(
-                "Radio:",
-                i,
-                "| ID:",
-                await radio.get_attribute("id"),
-                "| Value:",
-                await radio.get_attribute("value"),
-                "| Checked:",
-                await radio.is_checked()
-            )
+            if "allot" in text.lower() or "allot" in str(href).lower():
 
-        print("\n--- BUTTON DETAILS ---")
+                print(f"Text: {text}")
+                print(f"Href: {href}")
+                print()
 
-        button = page.locator("#btnsearc")
+        print("\n--- SEARCH FUNCTION ---")
 
-        print("Button count:", await button.count())
+        function_info = await page.evaluate("""
+        () => {
+            if (typeof CALLPANSERCH === 'function') {
+                return CALLPANSERCH.toString();
+            }
+            return 'CALLPANSERCH not found';
+        }
+        """)
 
-        if await button.count():
+        print(function_info)
 
-            print(
-                "Button HTML:",
-                await button.evaluate(
-                    "(el) => el.outerHTML"
-                )
-            )
+        print("\n--- PAGE SCRIPTS ---")
 
-        print("\n--- CAPTCHA DETAILS ---")
+        scripts = await page.locator("script").all()
 
-        captcha = page.locator("#txtCaptch")
+        for i, script in enumerate(scripts):
 
-        print(
-            "CAPTCHA HTML:",
-            await captcha.evaluate(
-                "(el) => el.outerHTML"
-            )
-        )
+            src = await script.get_attribute("src")
 
-        print("\n--- HIDDEN FIELDS ---")
-
-        hidden = page.locator(
-            'input[type="hidden"]'
-        )
-
-        for i in range(await hidden.count()):
-
-            field = hidden.nth(i)
-
-            print(
-                "Hidden:",
-                i,
-                "| ID:",
-                await field.get_attribute("id"),
-                "| Value:",
-                await field.get_attribute("value")
-            )
+            if src:
+                print(f"Script {i}: {src}")
 
         await browser.close()
 
 
 if __name__ == "__main__":
 
-    asyncio.run(inspect_form())
+    asyncio.run(inspect_logic())
