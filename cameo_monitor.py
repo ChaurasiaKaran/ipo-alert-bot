@@ -1,141 +1,51 @@
 import asyncio
-
 from playwright.async_api import async_playwright
-
 
 CAMEO_URL = "https://ipostatus1.cameoindia.com/"
 
-
 async def main():
-
     async with async_playwright() as p:
-
-        browser = await p.chromium.launch(
-            headless=True
-        )
-
+        browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
 
         print("Opening Cameo IPO status portal...")
+        await page.goto(CAMEO_URL, wait_until="networkidle")
 
-        await page.goto(
-            CAMEO_URL,
-            wait_until="networkidle",
-            timeout=60000
-        )
+        options = await page.locator("#drpCompany option").all()
 
-        await page.wait_for_timeout(3000)
+        print(f"Company options: {len(options)}")
+        print()
 
-        company = page.locator("#drpCompany")
+        for option in options:
+            value = await option.get_attribute("value")
+            text = (await option.inner_text()).strip()
 
-        print(
-            "Company options:",
-            await company.locator("option").count()
-        )
+            if not value:
+                continue
 
-        # Inspect the select element itself.
-        print("\nCompany dropdown attributes:")
+            # Actually trigger the website's onchange handler
+            await page.select_option("#drpCompany", value=value)
+            await page.locator("#drpCompany").dispatch_event("change")
 
-        for attr in [
-            "id",
-            "name",
-            "onchange",
-            "class",
-            "value"
-        ]:
+            await page.wait_for_timeout(300)
 
-            print(
-                attr + ":",
-                await company.get_attribute(attr)
+            button = page.locator("#view_button")
+
+            display = await button.evaluate(
+                "(el) => getComputedStyle(el).display"
             )
+            href = await button.get_attribute("href")
 
-        # Inspect the surrounding form.
-        form = company.locator(
-            "xpath=ancestor::form"
-        ).first
-
-        print("\nForm information:")
-
-        print(
-            "Form count:",
-            await company.locator(
-                "xpath=ancestor::form"
-            ).count()
-        )
-
-        if await form.count():
-
-            print(
-                "Action:",
-                await form.get_attribute("action")
-            )
-
-            print(
-                "Method:",
-                await form.get_attribute("method")
-            )
-
-        # Inspect scripts containing the dropdown ID.
-        scripts = page.locator("script")
-
-        print(
-            "\nSearching page scripts..."
-        )
-
-        for i in range(await scripts.count()):
-
-            text = await scripts.nth(i).inner_text()
-
-            if (
-                "drpCompany" in text
-                or "Basis" in text
-                or "Allotment" in text
-            ):
-
-                print(
-                    "\n--- SCRIPT", i, "---"
-                )
-
-                print(text[:8000])
-
-        # Inspect the hidden Basis link.
-        basis = page.get_by_text(
-            "CLICK TO VIEW BASIS OF ALLOTMENT",
-            exact=True
-        )
-
-        print(
-            "\nBasis link count:",
-            await basis.count()
-        )
-
-        if await basis.count():
-
-            print(
-                "Visible:",
-                await basis.is_visible()
-            )
-
-            print(
-                "Tag:",
-                await basis.evaluate(
-                    "(el) => el.tagName"
-                )
-            )
-
-            print(
-                "Outer HTML:"
-            )
-
-            print(
-                await basis.evaluate(
-                    "(el) => el.outerHTML"
-                )
-            )
+            if display != "none" or href:
+                print("FOUND BASIS LINK")
+                print(f"Company: {text}")
+                print(f"Value: {value}")
+                print(f"Display: {display}")
+                print(f"Href: {href}")
+                print("-" * 60)
 
         await browser.close()
 
 
 if __name__ == "__main__":
-
     asyncio.run(main())
