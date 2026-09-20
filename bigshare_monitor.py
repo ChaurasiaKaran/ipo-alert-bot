@@ -20,13 +20,18 @@ async def inspect_bigshare():
         print("OPENING BIGSHARE IPO ALLOTMENT STATUS PAGE")
         print("=" * 70)
 
-        await page.goto(
-            BIGSHARE_URL,
-            wait_until="networkidle",
-            timeout=60000
-        )
+        try:
+            await page.goto(
+                BIGSHARE_URL,
+                wait_until="domcontentloaded",
+                timeout=60000
+            )
+        except Exception as error:
+            print()
+            print("Initial page-load warning:")
+            print(error)
 
-        await page.wait_for_timeout(3000)
+        await page.wait_for_timeout(5000)
 
         print()
         print("Page title:")
@@ -248,7 +253,6 @@ async def inspect_bigshare():
         def handle_request(request):
 
             url = request.url
-
             lower = url.lower()
 
             if any(
@@ -276,12 +280,22 @@ async def inspect_bigshare():
             handle_request
         )
 
-        await page.reload(
-            wait_until="networkidle",
-            timeout=60000
-        )
+        try:
 
-        await page.wait_for_timeout(3000)
+            await page.reload(
+                wait_until="domcontentloaded",
+                timeout=60000
+            )
+
+        except Exception as error:
+
+            print()
+            print(
+                "Reload warning:"
+            )
+            print(error)
+
+        await page.wait_for_timeout(5000)
 
         unique_requests = []
 
