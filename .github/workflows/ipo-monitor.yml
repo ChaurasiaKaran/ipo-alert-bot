@@ -65,7 +65,7 @@ jobs:
           git config user.name "IPO Alert Bot"
           git config user.email "actions@github.com"
 
-          git add manika_state.txt cameo_state.txt
+          git add -A
 
           if git diff --cached --quiet; then
             echo "No state changes to commit."
