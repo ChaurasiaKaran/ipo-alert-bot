@@ -6,7 +6,89 @@ from playwright.async_api import async_playwright
 CAMEO_URL = "https://ipostatus1.cameoindia.com/"
 
 
-async def check_cameo():
+async def inspect_company(page, value, name):
+
+    print("\n" + "=" * 60)
+    print("Testing company:", name)
+    print("Value:", value)
+    print("=" * 60)
+
+    try:
+
+        await page.select_option(
+            "#drpCompany",
+            value=value
+        )
+
+        await page.wait_for_timeout(3000)
+
+        print("Company selected successfully.")
+
+        # Look for links
+        links = page.locator("a")
+
+        print(
+            "Links after selection:",
+            await links.count()
+        )
+
+        for i in range(await links.count()):
+
+            link = links.nth(i)
+
+            text = (
+                await link.inner_text()
+            ).strip()
+
+            href = await link.get_attribute(
+                "href"
+            )
+
+            if text or href:
+
+                print(
+                    f"LINK {i}:",
+                    repr(text),
+                    "|",
+                    href
+                )
+
+        # Look for visible text related to allotment
+        body = await page.locator(
+            "body"
+        ).inner_text()
+
+        lines = [
+            line.strip()
+            for line in body.splitlines()
+            if line.strip()
+        ]
+
+        print("\nRelevant text:")
+
+        for line in lines:
+
+            lower = line.lower()
+
+            if (
+                "allot" in lower
+                or "basis" in lower
+                or "ipo" in lower
+                or "pdf" in lower
+                or "company" in lower
+            ):
+
+                print(line)
+
+    except Exception as error:
+
+        print(
+            "Error testing company:",
+            error
+        )
+
+
+async def main():
 
     async with async_playwright() as p:
 
@@ -16,7 +98,9 @@ async def check_cameo():
 
         page = await browser.new_page()
 
-        print("Opening Cameo IPO status portal...")
+        print(
+            "Opening Cameo IPO status portal..."
+        )
 
         await page.goto(
             CAMEO_URL,
@@ -24,112 +108,56 @@ async def check_cameo():
             timeout=60000
         )
 
-        await page.wait_for_timeout(5000)
+        await page.wait_for_timeout(3000)
 
-        print("Page title:", await page.title())
+        company = page.locator(
+            "#drpCompany"
+        )
 
-        # Select elements
-        selects = page.locator("select")
+        options = company.locator(
+            "option"
+        )
+
+        count = await options.count()
 
         print(
-            "\nSelect elements:",
-            await selects.count()
+            "\nTotal company options:",
+            count
         )
 
-        for i in range(await selects.count()):
+        # Test the first 5 real companies.
+        # We intentionally don't submit any
+        # personal-status form or CAPTCHA.
 
-            select = selects.nth(i)
+        tested = 0
 
-            print(
-                f"SELECT {i}:",
-                await select.get_attribute("id"),
-                await select.get_attribute("name")
+        for i in range(1, count):
+
+            option = options.nth(i)
+
+            name = (
+                await option.inner_text()
+            ).strip()
+
+            value = await option.get_attribute(
+                "value"
             )
 
-            options = select.locator("option")
+            if not value or value == "0":
+                continue
 
-            print(
-                "  Options:",
-                await options.count()
+            await inspect_company(
+                page,
+                value,
+                name
             )
 
-            for j in range(
-                min(await options.count(), 10)
-            ):
+            tested += 1
 
-                option = options.nth(j)
-
-                print(
-                    "   ",
-                    j,
-                    await option.inner_text(),
-                    "| value =",
-                    await option.get_attribute("value")
-                )
-
-        # Inputs
-        inputs = page.locator("input")
-
-        print(
-            "\nInput elements:",
-            await inputs.count()
-        )
-
-        for i in range(await inputs.count()):
-
-            inp = inputs.nth(i)
-
-            print(
-                f"INPUT {i}:",
-                "type=",
-                await inp.get_attribute("type"),
-                "id=",
-                await inp.get_attribute("id"),
-                "name=",
-                await inp.get_attribute("name"),
-                "value=",
-                await inp.get_attribute("value")
-            )
-
-        # Buttons
-        buttons = page.locator(
-            "button, input[type='button'], "
-            "input[type='submit']"
-        )
-
-        print(
-            "\nButton elements:",
-            await buttons.count()
-        )
-
-        for i in range(await buttons.count()):
-
-            button = buttons.nth(i)
-
-            print(
-                f"BUTTON {i}:",
-                await button.inner_text(),
-                "| value=",
-                await button.get_attribute("value"),
-                "| id=",
-                await button.get_attribute("id")
-            )
+            if tested >= 5:
+                break
 
         await browser.close()
-
-
-async def main():
-
-    try:
-
-        await check_cameo()
-
-    except Exception as error:
-
-        print(
-            "Cameo monitor error:",
-            error
-        )
 
 
 if __name__ == "__main__":
