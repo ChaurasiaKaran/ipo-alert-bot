@@ -301,6 +301,14 @@ async def monitor_kfin():
         )
 
         page = await browser.new_page()
+        page.on(
+    "request",
+    lambda request: print(
+        "REQUEST:",
+        request.method,
+        request.url
+    )
+        )
 
         try:
 
