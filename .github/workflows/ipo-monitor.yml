@@ -14,10 +14,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+
   monitor:
+
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -34,26 +37,9 @@ jobs:
         run: |
           playwright install --with-deps chromium
 
-      - name: Run MUFG monitor
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          python registrar.py
-
-      - name: Run Bigshare monitor
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          python bigshare_monitor.py
-
-      - name: Run Cameo monitor
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          python cameo_monitor.py
+      # ------------------------------------------------------
+      # KFIN
+      # ------------------------------------------------------
 
       - name: Run KFin monitor
         env:
@@ -64,8 +50,46 @@ jobs:
         run: |
           python kfin_monitor.py
 
+      # ------------------------------------------------------
+      # MUFG
+      # ------------------------------------------------------
+
+      - name: Run MUFG monitor
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python registrar.py
+
+      # ------------------------------------------------------
+      # BIGSHARE
+      # ------------------------------------------------------
+
+      - name: Run Bigshare monitor
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python bigshare_monitor.py
+
+      # ------------------------------------------------------
+      # CAMEO
+      # ------------------------------------------------------
+
+      - name: Run Cameo monitor
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python cameo_monitor.py
+
+      # ------------------------------------------------------
+      # SAVE STATE
+      # ------------------------------------------------------
+
       - name: Save alert state
         run: |
+
           git config user.name "IPO Alert Bot"
           git config user.email "actions@github.com"
 
