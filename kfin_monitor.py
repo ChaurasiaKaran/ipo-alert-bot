@@ -163,17 +163,12 @@ def download_bundle(url):
 def find_api_types(bundle):
 
     print()
-    print("Possible API query constructions:")
+    print("KFin API endpoint usage:")
 
     patterns = [
-        r'api/query',
-        r'query\?type',
-        r'/api/query',
-        r'execute-api',
-        r'fetch\(',
-        r'axios\.',
-        r'\.get\(',
-        r'\.post\(',
+        r'\bto\b',
+        r'execute-api\.ap-south-1\.amazonaws\.com',
+        r'risop\.kfintech\.com/ipostatus',
     ]
 
     for pattern in patterns:
@@ -189,26 +184,23 @@ def find_api_types(bundle):
             )
         )
 
-        print(
-            "Matches:",
-            len(matches)
-        )
+        print("Matches:", len(matches))
 
-        for match in matches[:10]:
+        for match in matches[:20]:
 
             start = max(
                 0,
-                match.start() - 300
+                match.start() - 1500
             )
 
             end = min(
                 len(bundle),
-                match.end() + 500
+                match.end() + 2500
             )
 
-            print(
-                bundle[start:end]
-            )
+            print("=" * 80)
+            print(bundle[start:end])
+            print("=" * 80)
 
 # ============================================================
 # FIND API URLS
