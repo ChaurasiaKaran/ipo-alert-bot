@@ -1,6 +1,8 @@
 import os
 import re
 import asyncio
+import time
+import json
 import requests
 
 from playwright.async_api import async_playwright
@@ -12,10 +14,34 @@ from playwright.async_api import async_playwright
 
 KFIN_URL = "https://ipostatus.kfintech.com/ipostatus"
 
-TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+KFIN_API = (
+    "https://0uz601ms56.execute-api.ap-south-1.amazonaws.com/"
+    "prod/api/query?type="
+)
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+
+# Multiple PANs:
+#
+# KFIN_PANS=ABCDE1234F,XYZAB5678C,PQRST9012D
+#
+# Existing KFIN_PAN is also supported as a fallback.
+#
+KFIN_PANS = os.getenv("KFIN_PANS", "").strip()
+OLD_KFIN_PAN = os.getenv("KFIN_PAN", "").strip()
+
+# Number of recent IPOs to check.
+#
+# Keeping this limited avoids sending a very large number
+# of requests to KFin on every GitHub Actions run.
+#
+MAX_IPOS_TO_CHECK = int(
+    os.getenv("KFIN_MAX_IPOS", "5")
+)
 
 STATE_FILE = "kfin_state.txt"
+STATUS_STATE_FILE = "kfin_status_state.json"
 
 
 # ============================================================
@@ -24,28 +50,46 @@ STATE_FILE = "kfin_state.txt"
 
 def send_telegram(message):
 
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("Telegram credentials are not configured.")
+        return
+
     url = (
-        f"https://api.telegram.org/"
-        f"bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        f"https://api.telegram.org/bot"
+        f"{TELEGRAM_BOT_TOKEN}/sendMessage"
     )
 
-    response = requests.post(
-        url,
-        data={
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": message,
-            "disable_web_page_preview": False,
-        },
-        timeout=30,
-    )
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+    }
 
-    response.raise_for_status()
+    try:
 
-    print("Telegram notification sent.")
+        response = requests.post(
+            url,
+            json=payload,
+            timeout=30,
+        )
+
+        if response.status_code == 200:
+            print("Telegram alert sent.")
+        else:
+            print(
+                "Telegram error:",
+                response.status_code
+            )
+
+    except requests.RequestException as e:
+
+        print(
+            "Telegram request failed:",
+            type(e).__name__
+        )
 
 
 # ============================================================
-# STATE
+# IPO DISCOVERY STATE
 # ============================================================
 
 def load_state():
@@ -59,56 +103,191 @@ def load_state():
             STATE_FILE,
             "r",
             encoding="utf-8"
-        ) as file:
+        ) as f:
 
             return {
                 line.strip()
-                for line in file
+                for line in f
                 if line.strip()
             }
 
-    except Exception as error:
+    except Exception as e:
 
         print(
             "Could not read KFin state:",
-            error
+            type(e).__name__
         )
 
         return set()
 
 
-def save_state(state):
+def save_state(ipo_names):
 
-    with open(
-        STATE_FILE,
-        "w",
-        encoding="utf-8"
-    ) as file:
+    try:
 
-        for item in sorted(state):
+        with open(
+            STATE_FILE,
+            "w",
+            encoding="utf-8"
+        ) as f:
 
-            file.write(
-                item + "\n"
+            for name in sorted(ipo_names):
+                f.write(name + "\n")
+
+        print("KFin IPO state saved successfully.")
+
+    except Exception as e:
+
+        print(
+            "Could not save KFin state:",
+            type(e).__name__
+        )
+
+
+# ============================================================
+# ALLOTMENT STATUS STATE
+# ============================================================
+
+def load_status_state():
+
+    if not os.path.exists(STATUS_STATE_FILE):
+        return {}
+
+    try:
+
+        with open(
+            STATUS_STATE_FILE,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
+            data = json.load(f)
+
+            if isinstance(data, dict):
+                return data
+
+    except Exception as e:
+
+        print(
+            "Could not read KFin status state:",
+            type(e).__name__
+        )
+
+    return {}
+
+
+def save_status_state(state):
+
+    try:
+
+        with open(
+            STATUS_STATE_FILE,
+            "w",
+            encoding="utf-8"
+        ) as f:
+
+            json.dump(
+                state,
+                f,
+                indent=2,
+                sort_keys=True
+            )
+
+        print("KFin allotment state saved successfully.")
+
+    except Exception as e:
+
+        print(
+            "Could not save KFin status state:",
+            type(e).__name__
+        )
+
+
+# ============================================================
+# PAN HANDLING
+# ============================================================
+
+def get_kfin_pans():
+
+    """
+    Read multiple PANs from:
+
+        KFIN_PANS
+
+    Example:
+
+        ABCDE1234F,XYZAB5678C,PQRST9012D
+
+    KFIN_PAN remains supported as a fallback.
+    """
+
+    raw = KFIN_PANS
+
+    if not raw:
+        raw = OLD_KFIN_PAN
+
+    if not raw:
+
+        print(
+            "No KFin PAN secret configured."
+        )
+
+        return []
+
+    pans = []
+
+    for value in raw.split(","):
+
+        pan = value.strip().upper()
+
+        if re.fullmatch(
+            r"[A-Z]{5}[0-9]{4}[A-Z]",
+            pan
+        ):
+
+            if pan not in pans:
+                pans.append(pan)
+
+        else:
+
+            print(
+                "Ignoring an invalid PAN entry."
             )
 
     print(
-        "KFin state saved successfully."
+        "KFin PANs configured:",
+        len(pans)
     )
 
+    return pans
+
+
+def mask_pan(pan):
+
+    """
+    Example:
+
+        ABCDE1234F
+        XXXXX1234F
+    """
+
+    if len(pan) != 10:
+        return "XXXXX"
+
+    return "XXXXX" + pan[5:]
+
 
 # ============================================================
-# GET JAVASCRIPT BUNDLE URL
+# KFIN BUNDLE
 # ============================================================
 
-async def get_bundle_url(page):
+def get_bundle_url(page):
 
     scripts = await page.locator(
         "script[src]"
     ).evaluate_all(
         """
-        elements => elements.map(
-            element => element.src
-        )
+        scripts => scripts.map(s => s.src)
         """
     )
 
@@ -116,269 +295,645 @@ async def get_bundle_url(page):
 
         if "static/js/" in url:
 
-            print()
-            print(
-                "KFin JavaScript bundle:"
-            )
-
-            print(url)
-
             return url
 
     return None
 
 
-# ============================================================
-# DOWNLOAD BUNDLE
-# ============================================================
-
 def download_bundle(url):
 
     print()
-    print(
-        "Downloading KFin bundle..."
-    )
+    print("Downloading KFin bundle...")
 
-    response = requests.get(
-        url,
-        timeout=30,
-        headers={
-            "User-Agent":
-                "Mozilla/5.0"
-        }
-    )
+    try:
 
-    response.raise_for_status()
+        response = requests.get(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0"
+            },
+            timeout=30,
+        )
 
-    print(
-        "Bundle downloaded."
-    )
+        response.raise_for_status()
 
-    print(
-        "Bundle size:",
-        len(response.text)
-    )
+        print("Bundle downloaded.")
 
-    return response.text
+        print(
+            "Bundle size:",
+            len(response.text)
+        )
+
+        return response.text
+
+    except requests.RequestException as e:
+
+        print(
+            "Could not download KFin bundle:",
+            type(e).__name__
+        )
+
+        return ""
 
 
 # ============================================================
-# FIND API URLS
+# IPO EXTRACTION
+# ============================================================
+
+def extract_ipo_records(bundle):
+
+    """
+    Extract:
+
+        clientId
+        name
+
+    from KFin's embedded IPO list.
+    """
+
+    pattern = (
+        r'\{"clientId":"([^"]+)","name":"([^"]+)"\}'
+    )
+
+    matches = re.findall(
+        pattern,
+        bundle
+    )
+
+    records = []
+
+    seen_ids = set()
+
+    for client_id, name in matches:
+
+        if client_id in seen_ids:
+            continue
+
+        seen_ids.add(client_id)
+
+        records.append({
+            "client_id": client_id,
+            "name": name,
+        })
+
+    return records
+
+
+def extract_ipo_names(bundle):
+
+    records = extract_ipo_records(bundle)
+
+    return {
+        record["name"]
+        for record in records
+    }
+
+
+# ============================================================
+# API / JAVASCRIPT INSPECTION
 # ============================================================
 
 def find_api_urls(bundle):
 
-    urls = set(
-        re.findall(
-            r'https?://[^"\']+',
-            bundle
-        )
+    print()
+    print("KFin API references:")
+    print("=" * 80)
+
+    urls = re.findall(
+        r'https?://[^"\']+',
+        bundle
     )
 
-    print()
-    print("Possible KFin API URLs:")
+    seen = set()
 
-    for url in sorted(urls):
+    for url in urls:
 
         if (
-            "api" in url.lower()
-            or "kfin" in url.lower()
+            "execute-api" in url
+            or "ris.kfintech" in url
+            or "risop.kfintech" in url
         ):
 
-            print(url)
+            if url not in seen:
 
+                print(url)
 
-# ============================================================
-# FIND KFIN SUBMIT / API LOGIC
-# ============================================================
+                seen.add(url)
+
 
 def find_submit_logic(bundle):
 
     print()
-    print("Targeted KFin request construction:")
+    print("KFin request construction:")
     print("=" * 80)
 
     searches = [
         "e=I(),t=e.type,n=e.header",
-        "t=e.type,n=e.header",
-        "I(),t=e.type",
-        "reqparam:n",
-        "client_id:`${S}`",
+        "reqparam",
+        "client_id",
+        "api/query?type=",
     ]
 
     for keyword in searches:
 
-        positions = [
-            match.start()
-            for match in re.finditer(
+        count = len(
+            re.findall(
                 re.escape(keyword),
                 bundle,
                 re.IGNORECASE
             )
-        ]
-
-        print()
-        print("SEARCH:", keyword)
-        print("Matches:", len(positions))
-
-        for pos in positions[-5:]:
-
-            start = max(0, pos - 8000)
-            end = min(len(bundle), pos + 8000)
-
-            print("-" * 80)
-            print(bundle[start:end])
-            print("-" * 80)
-
-
-# ============================================================
-# EXTRACT IPO NAMES
-# ============================================================
-
-def extract_ipo_names(bundle):
-
-    names = set()
-
-    # --------------------------------------------------------
-    # Look for common IPO name fields
-    # --------------------------------------------------------
-
-    patterns = [
-
-        r'"(?:companyName|company_name|ipoName|ipo_name|name)"\s*:\s*"([^"]+)"',
-
-        r'"(?:CompanyName|Company_Name|IPOName|IPO_Name)"\s*:\s*"([^"]+)"',
-
-    ]
-
-    for pattern in patterns:
-
-        matches = re.findall(
-            pattern,
-            bundle
         )
 
-        for match in matches:
+        print(
+            f"{keyword}: {count} match(es)"
+        )
 
-            name = match.strip()
 
-            if not name:
-                continue
+# ============================================================
+# KFIN PAN API
+# ============================================================
 
-            names.add(name)
+def query_kfin_pan(
+    ipo_client_id,
+    pan
+):
 
-    # --------------------------------------------------------
-    # Detect IPO-like uppercase strings
-    # --------------------------------------------------------
+    """
+    Query KFin using PAN.
 
-    uppercase_pattern = (
-        r'"([A-Z][A-Z0-9&().,\- /]{5,100}'
-        r'(?:LIMITED|LTD|IPO|SME|REIT|INVIT|NCD)[^"]*)"'
-    )
+    Important:
+    The PAN is never printed.
+    """
+
+    url = KFIN_API + "pan"
+
+    headers = {
+        "reqparam": pan,
+        "client_id": ipo_client_id,
+        "Access-Control-Allow-Origin": "*",
+        "User-Agent": "Mozilla/5.0",
+    }
 
     try:
 
-        matches = re.findall(
-            uppercase_pattern,
-            bundle
+        response = requests.get(
+            url,
+            headers=headers,
+            timeout=30,
         )
 
-        for match in matches:
+        print(
+            "KFin API HTTP status:",
+            response.status_code
+        )
 
-            name = match.strip()
+        if response.status_code == 404:
 
-            if name:
+            return {
+                "status": "not_found",
+                "results": []
+            }
 
-                names.add(name)
+        if response.status_code == 429:
 
-    except Exception:
-        pass
+            return {
+                "status": "rate_limited",
+                "results": []
+            }
 
-    # --------------------------------------------------------
-    # Remove obvious non-IPO UI text
-    # --------------------------------------------------------
+        if response.status_code in (
+            500,
+            502,
+            504,
+        ):
 
-    excluded = {
-        "SELECT IPO",
-        "SELECT",
-        "SUBMIT",
-        "APPLICATION NO",
-        "DEMAT ACCOUNT",
-        "PAN",
-        "ENTER PAN NO",
-        "ENTER APPLICATION NO",
-        "ENTER DEMAT ACCOUNT",
-    }
+            return {
+                "status": "server_error",
+                "results": []
+            }
 
-    cleaned = set()
+        if response.status_code != 200:
 
-    for name in names:
+            return {
+                "status": "error",
+                "http_status": response.status_code,
+                "results": []
+            }
 
-        if name.upper() in excluded:
-            continue
+        try:
 
-        if len(name) < 5:
-            continue
+            data = response.json()
 
-        cleaned.add(name)
+        except ValueError:
 
-    return cleaned
+            print(
+                "KFin returned a non-JSON response."
+            )
+
+            return {
+                "status": "invalid_response",
+                "results": []
+            }
+
+        rows = []
+
+        if isinstance(data, dict):
+
+            outer = data.get("data")
+
+            if isinstance(outer, dict):
+
+                rows = outer.get(
+                    "data",
+                    []
+                )
+
+            elif isinstance(outer, list):
+
+                rows = outer
+
+        if not isinstance(rows, list):
+
+            rows = []
+
+        results = []
+
+        for row in rows:
+
+            if not isinstance(row, dict):
+                continue
+
+            all_shares = row.get(
+                "All_Shares",
+                0
+            )
+
+            app_shares = row.get(
+                "App_Shares",
+                0
+            )
+
+            ipo_title = row.get(
+                "ipoTitle"
+            )
+
+            try:
+
+                all_shares = int(
+                    all_shares or 0
+                )
+
+            except (
+                TypeError,
+                ValueError
+            ):
+
+                all_shares = 0
+
+            try:
+
+                app_shares = int(
+                    app_shares or 0
+                )
+
+            except (
+                TypeError,
+                ValueError
+            ):
+
+                app_shares = 0
+
+            if all_shares > 0:
+
+                status = "Allotted"
+
+            else:
+
+                status = "Not Allotted"
+
+            results.append({
+                "ipo_title": ipo_title,
+                "all_shares": all_shares,
+                "app_shares": app_shares,
+                "status": status,
+            })
+
+        return {
+            "status": "success",
+            "results": results
+        }
+
+    except requests.RequestException as e:
+
+        print(
+            "KFin API request failed:",
+            type(e).__name__
+        )
+
+        return {
+            "status": "request_error",
+            "results": []
+        }
+
+
+# ============================================================
+# ALLOTMENT CHECK
+# ============================================================
+
+def check_allotment_status(
+    ipo_records,
+    pans
+):
+
+    if not pans:
+
+        print(
+            "No PANs available for allotment checks."
+        )
+
+        return
+
+    if not ipo_records:
+
+        print(
+            "No IPOs available for allotment checks."
+        )
+
+        return
+
+    print()
+    print("=" * 80)
+    print("KFIN ALLOTMENT STATUS CHECK")
+    print("=" * 80)
+
+    print(
+        "PANs to check:",
+        len(pans)
+    )
+
+    print(
+        "IPOs to check:",
+        len(ipo_records)
+    )
+
+    status_state = load_status_state()
+
+    for ipo in ipo_records:
+
+        ipo_name = ipo["name"]
+        client_id = ipo["client_id"]
+
+        print()
+        print(
+            "Checking IPO:",
+            ipo_name
+        )
+
+        for pan in pans:
+
+            masked_pan = mask_pan(pan)
+
+            print(
+                "Checking PAN:",
+                masked_pan
+            )
+
+            result = query_kfin_pan(
+                client_id,
+                pan
+            )
+
+            result_status = result.get(
+                "status"
+            )
+
+            if result_status == "rate_limited":
+
+                print(
+                    "KFin rate limit reached."
+                )
+
+                print(
+                    "Stopping further checks for this run."
+                )
+
+                save_status_state(
+                    status_state
+                )
+
+                return
+
+            if result_status != "success":
+
+                print(
+                    "No usable result for:",
+                    masked_pan
+                )
+
+                # Small delay before next request
+                time.sleep(2)
+
+                continue
+
+            results = result.get(
+                "results",
+                []
+            )
+
+            if not results:
+
+                print(
+                    "No allotment result returned."
+                )
+
+                time.sleep(2)
+
+                continue
+
+            for row in results:
+
+                status = row.get(
+                    "status",
+                    "Unknown"
+                )
+
+                shares = row.get(
+                    "all_shares",
+                    0
+                )
+
+                applied = row.get(
+                    "app_shares",
+                    0
+                )
+
+                title = (
+                    row.get("ipo_title")
+                    or ipo_name
+                )
+
+                print(
+                    f"Result: {status} | "
+                    f"Shares: {shares} | "
+                    f"Applied: {applied}"
+                )
+
+                # Unique state key for this PAN + IPO
+                state_key = (
+                    f"{masked_pan}|"
+                    f"{client_id}"
+                )
+
+                previous = status_state.get(
+                    state_key
+                )
+
+                current_record = {
+                    "status": status,
+                    "shares": shares,
+                    "applied": applied,
+                    "ipo": title,
+                }
+
+                # Alert only when the status changes
+                # or when this is the first successful result.
+                should_alert = (
+                    previous != current_record
+                )
+
+                if should_alert:
+
+                    message = (
+                        "KFintech Allotment Update\n\n"
+                        f"IPO: {title}\n"
+                        f"PAN: {masked_pan}\n"
+                        f"Status: {status}\n"
+                        f"Allotted Shares: {shares}\n"
+                        f"Applied Shares: {applied}"
+                    )
+
+                    send_telegram(
+                        message
+                    )
+
+                    status_state[
+                        state_key
+                    ] = current_record
+
+                else:
+
+                    print(
+                        "No allotment status change."
+                    )
+
+            # Be gentle with KFin API
+            time.sleep(2)
+
+    save_status_state(
+        status_state
+    )
+
+
+# ============================================================
+# SELECT IPOs TO CHECK
+# ============================================================
+
+def select_ipos_to_check(
+    ipo_records,
+    newly_detected
+):
+
+    if not ipo_records:
+        return []
+
+    # Optional manual list.
+    #
+    # Example:
+    #
+    # KFIN_IPOS_TO_CHECK=
+    # INNOVISION LIMITED-IPO,
+    # RAJPUTANA STAINLESS LIMITED-IPO
+    #
+    manual = os.getenv(
+        "KFIN_IPOS_TO_CHECK",
+        ""
+    ).strip()
+
+    if manual:
+
+        requested = {
+            x.strip().upper()
+            for x in manual.split(",")
+            if x.strip()
+        }
+
+        selected = [
+            ipo
+            for ipo in ipo_records
+            if ipo["name"].upper()
+            in requested
+        ]
+
+        print()
+        print(
+            "Using manually selected KFin IPOs:",
+            len(selected)
+        )
+
+        return selected
+
+    # If new IPOs were detected, check those first.
+    new_records = [
+        ipo
+        for ipo in ipo_records
+        if ipo["name"] in newly_detected
+    ]
+
+    if new_records:
+
+        selected = new_records[
+            :MAX_IPOS_TO_CHECK
+        ]
+
+        print()
+        print(
+            "Checking newly detected KFin IPOs:",
+            len(selected)
+        )
+
+        return selected
+
+    # Otherwise check the most recent IPOs
+    # from the embedded KFin list.
+    selected = ipo_records[
+        :MAX_IPOS_TO_CHECK
+    ]
+
+    print()
+    print(
+        "No new IPOs detected."
+    )
+
+    print(
+        "Checking recent KFin IPOs:",
+        len(selected)
+    )
+
+    return selected
 
 
 # ============================================================
 # MAIN MONITOR
 # ============================================================
 
-def inspect_kfin_api(bundle):
-
-    print()
-    print("KFin API request structure:")
-    print("=" * 80)
-
-    # The website's JavaScript shows these request types.
-    print("Supported request types:")
-    print("  PAN             -> type=pan")
-    print("  Application No  -> type=appno")
-    print("  DPID Client ID  -> type=dpclid")
-
-    # Find the IPO clientId/name data embedded in the bundle.
-    pattern = r'\{"clientId":"([^"]+)","name":"([^"]+)"\}'
-    matches = re.findall(pattern, bundle)
-
-    print()
-    print("Embedded IPO records:", len(matches))
-
-    for client_id, name in matches[:10]:
-        print(f"  {name} -> client_id={client_id}")
-
-    if len(matches) > 10:
-        print(f"  ... and {len(matches) - 10} more")
-
-    print()
-    print("API endpoint:")
-    print(
-        "https://0uz601ms56.execute-api.ap-south-1.amazonaws.com/"
-        "prod/api/query?type=<TYPE>"
-    )
-
-    print()
-    print("Request headers:")
-    print("  reqparam  = lookup value")
-    print("  client_id = selected IPO clientId")
-    
 async def monitor_kfin():
 
-    state = load_state()
+    previous_ipos = load_state()
 
-    print()
     print(
         "Previously detected KFin IPOs:",
-        len(state)
+        len(previous_ipos)
     )
-
-    # --------------------------------------------------------
-    # Open official KFin page
-    # --------------------------------------------------------
 
     async with async_playwright() as p:
 
@@ -388,33 +943,30 @@ async def monitor_kfin():
 
         page = await browser.new_page()
 
-        # ----------------------------------------------------
-        # Log browser requests
-        # ----------------------------------------------------
+        # Request logging
+        def log_request(request):
 
-        page.on(
-            "request",
-            lambda request: print(
+            print(
                 "REQUEST:",
                 request.method,
                 request.url
             )
+
+        page.on(
+            "request",
+            log_request
         )
 
-        try:
+        print()
+        print(
+            "Opening KFintech..."
+        )
 
-            await page.goto(
-                KFIN_URL,
-                wait_until="domcontentloaded",
-                timeout=30000
-            )
-
-        except Exception as error:
-
-            print(
-                "Page-load warning:",
-                error
-            )
+        await page.goto(
+            KFIN_URL,
+            wait_until="domcontentloaded",
+            timeout=60000
+        )
 
         await page.wait_for_timeout(
             3000
@@ -430,218 +982,141 @@ async def monitor_kfin():
             page
         )
 
-        await browser.close()
+        if not bundle_url:
 
-    if not bundle_url:
+            print(
+                "Could not find KFin JavaScript bundle."
+            )
 
-        raise RuntimeError(
-            "Could not find KFin JavaScript bundle."
-        )
-
-    # --------------------------------------------------------
-    # Download and inspect bundle
-    # --------------------------------------------------------
-
-    bundle = download_bundle(
-        bundle_url
-    )
-
-    ipo_names = extract_ipo_names(
-        bundle
-    )
-
-    find_api_urls(
-        bundle
-    )
-
-    find_submit_logic(
-        bundle
-    )
-
-    inspect_kfin_api(bundle)
-
-    # --------------------------------------------------------
-    # Display IPO summary
-    # --------------------------------------------------------
-
-    print()
-    print(
-        "=" * 60
-    )
-
-    print(
-        "KFIN IPO SUMMARY"
-    )
-
-    print(
-        "=" * 60
-    )
-
-    print(
-        "IPO names detected:",
-        len(ipo_names)
-    )
-
-    for name in sorted(
-        ipo_names
-    ):
-
-        print(
-            name
-        )
-
-    # --------------------------------------------------------
-    # Safety check
-    #
-    # If extraction unexpectedly finds nothing,
-    # do not modify existing state.
-    # --------------------------------------------------------
-
-    if not ipo_names:
+            await browser.close()
+            return
 
         print()
         print(
-            "No IPO names detected."
+            "KFin JavaScript bundle:"
         )
 
-        print(
-            "Existing state will not be changed."
+        print(bundle_url)
+
+        bundle = download_bundle(
+            bundle_url
         )
 
-        return
+        if not bundle:
 
-    # --------------------------------------------------------
-    # First run = baseline
-    # --------------------------------------------------------
+            await browser.close()
+            return
 
-    if not state:
+        # Debug information
+        find_api_urls(bundle)
+        find_submit_logic(bundle)
+
+        # Extract IPO records
+        ipo_records = extract_ipo_records(
+            bundle
+        )
 
         print()
         print(
-            "First KFin run detected."
+            "Total KFin IPO records:",
+            len(ipo_records)
         )
 
+        if not ipo_records:
+
+            print(
+                "No KFin IPO records found."
+            )
+
+            await browser.close()
+            return
+
+        current_ipos = {
+            ipo["name"]
+            for ipo in ipo_records
+        }
+
+        new_ipos = (
+            current_ipos
+            - previous_ipos
+        )
+
+        print()
         print(
-            "Saving current IPOs as baseline."
+            "New KFin IPOs detected:",
+            len(new_ipos)
         )
 
-        for name in ipo_names:
+        for name in sorted(new_ipos):
 
-            state.add(
+            print(
+                "NEW KFIN IPO:",
                 name
             )
 
-        save_state(
-            state
-        )
+        # Telegram alert for new IPOs
+        if previous_ipos:
 
-        print(
-            "Baseline created."
-        )
+            for name in sorted(new_ipos):
 
-        print(
-            "No Telegram alerts sent on first run."
-        )
+                message = (
+                    "New KFintech IPO detected\n\n"
+                    f"IPO: {name}"
+                )
 
-        return
+                send_telegram(
+                    message
+                )
 
-    # --------------------------------------------------------
-    # Detect new IPOs
-    # --------------------------------------------------------
-
-    new_ipos = []
-
-    for name in sorted(
-        ipo_names
-    ):
-
-        if name not in state:
-
-            new_ipos.append(
-                name
-            )
-
-    print()
-    print(
-        "New KFin IPOs:",
-        len(new_ipos)
-    )
-
-    # --------------------------------------------------------
-    # Telegram alerts
-    # --------------------------------------------------------
-
-    for name in new_ipos:
-
-        message = (
-            "🚨 KFIN IPO STATUS UPDATE\n\n"
-            f"IPO: {name}\n\n"
-            "This IPO has appeared in the "
-            "official KFin IPO status service.\n\n"
-            f"KFin status page:\n"
-            f"{KFIN_URL}"
-        )
-
-        try:
-
-            send_telegram(
-                message
-            )
-
-            state.add(
-                name
-            )
-
-            save_state(
-                state
-            )
-
-        except Exception as error:
+        else:
 
             print()
             print(
-                "Telegram error:"
+                "First KFin run detected."
             )
 
             print(
-                error
+                "Saving current IPOs as baseline."
             )
 
-    # --------------------------------------------------------
-    # Save all currently detected names
-    # --------------------------------------------------------
-
-    for name in ipo_names:
-
-        state.add(
-            name
+        # Save IPO discovery state
+        save_state(
+            current_ipos
         )
 
-    save_state(
-        state
+        await browser.close()
+
+    # --------------------------------------------------------
+    # ALLOTMENT STATUS
+    # --------------------------------------------------------
+
+    pans = get_kfin_pans()
+
+    if not pans:
+
+        print()
+        print(
+            "Skipping KFin allotment checks."
+        )
+
+        return
+
+    selected_ipos = select_ipos_to_check(
+        ipo_records,
+        new_ipos
     )
 
-    print()
-    print(
-        "=" * 60
-    )
+    if not selected_ipos:
 
-    print(
-        "KFIN MONITOR FINISHED"
-    )
+        print(
+            "No IPOs selected for allotment check."
+        )
 
-    print(
-        "=" * 60
-    )
+        return
 
-    print(
-        "New alerts:",
-        len(new_ipos)
-    )
-
-    print(
-        "Saved IPOs:",
-        len(state)
+    check_allotment_status(
+        selected_ipos,
+        pans
     )
 
 
@@ -649,28 +1124,8 @@ async def monitor_kfin():
 # ENTRY POINT
 # ============================================================
 
-async def main():
-
-    try:
-
-        await monitor_kfin()
-
-    except Exception as error:
-
-        print()
-        print(
-            "KFin monitor failed:"
-        )
-
-        print(
-            error
-        )
-
-        raise
-
-
 if __name__ == "__main__":
 
     asyncio.run(
-        main()
+        monitor_kfin()
     )
