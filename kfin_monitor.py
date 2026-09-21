@@ -422,7 +422,7 @@ async def monitor_kfin():
         bundle
     )
     find_api_urls(bundle)
-    find_submit_logic(bundle)
+find_submit_logic(bundle)
 
     print()
     print("=" * 60)
