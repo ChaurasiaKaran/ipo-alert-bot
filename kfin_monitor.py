@@ -163,12 +163,13 @@ def download_bundle(url):
 def find_api_types(bundle):
 
     print()
-    print("KFin API endpoint usage:")
+    print("KFin API endpoint references:")
 
     patterns = [
-        r'\bto\b',
-        r'execute-api\.ap-south-1\.amazonaws\.com',
-        r'risop\.kfintech\.com/ipostatus',
+        r'execute-api\.ap-south-1\.amazonaws\.com/prod/api/query\?type=',
+        r'api/query\?type=',
+        r'fetch\([^)]{0,1000}execute-api',
+        r'execute-api[^;]{0,3000}',
     ]
 
     for pattern in patterns:
@@ -186,17 +187,10 @@ def find_api_types(bundle):
 
         print("Matches:", len(matches))
 
-        for match in matches[:20]:
+        for match in matches[:10]:
 
-            start = max(
-                0,
-                match.start() - 1500
-            )
-
-            end = min(
-                len(bundle),
-                match.end() + 2500
-            )
+            start = max(0, match.start() - 3000)
+            end = min(len(bundle), match.end() + 5000)
 
             print("=" * 80)
             print(bundle[start:end])
