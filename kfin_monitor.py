@@ -160,7 +160,7 @@ def download_bundle(url):
     )
 
     return response.text
-    def find_api_types(bundle):
+def find_api_types(bundle):
 
     print()
     print("Possible API request types:")
