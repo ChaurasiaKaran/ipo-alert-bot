@@ -458,6 +458,8 @@ async def monitor_kfin():
         bundle
     )
 
+    inspect_kfin_api(bundle)
+
     # --------------------------------------------------------
     # Display IPO summary
     # --------------------------------------------------------
