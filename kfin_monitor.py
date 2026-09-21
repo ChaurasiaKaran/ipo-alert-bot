@@ -160,6 +160,38 @@ def download_bundle(url):
     )
 
     return response.text
+
+
+# ============================================================
+# FIND API URLS
+# ============================================================
+
+def find_api_urls(bundle):
+
+    urls = set(
+        re.findall(
+            r'https?://[^"\']+',
+            bundle
+        )
+    )
+
+    print()
+    print("Possible KFin API URLs:")
+
+    for url in sorted(urls):
+
+        if (
+            "api" in url.lower()
+            or "kfin" in url.lower()
+        ):
+
+            print(url)
+
+
+# ============================================================
+# FIND KFIN SUBMIT / API LOGIC
+# ============================================================
+
 def find_submit_logic(bundle):
 
     print()
@@ -180,8 +212,8 @@ def find_submit_logic(bundle):
     for keyword in keywords:
 
         positions = [
-            m.start()
-            for m in re.finditer(
+            match.start()
+            for match in re.finditer(
                 re.escape(keyword),
                 bundle,
                 re.IGNORECASE
@@ -189,39 +221,39 @@ def find_submit_logic(bundle):
         ]
 
         print()
-        print("KEYWORD:", keyword)
-        print("Matches:", len(positions))
+        print(
+            "KEYWORD:",
+            keyword
+        )
+
+        print(
+            "Matches:",
+            len(positions)
+        )
 
         for pos in positions[-5:]:
 
-            start = max(0, pos - 5000)
-            end = min(len(bundle), pos + 5000)
+            start = max(
+                0,
+                pos - 5000
+            )
 
-            print("-" * 80)
-            print(bundle[start:end])
-            print("-" * 80)
+            end = min(
+                len(bundle),
+                pos + 5000
+            )
 
-# ============================================================
-# FIND API URLS
-# ============================================================
+            print(
+                "-" * 80
+            )
 
-def find_api_urls(bundle):
+            print(
+                bundle[start:end]
+            )
 
-    urls = set(
-        re.findall(
-            r'https?://[^"\']+',
-            bundle
-        )
-    )
-
-    print()
-    print("Possible KFin API URLs:")
-
-    for url in sorted(urls):
-
-        if "api" in url.lower() or "kfin" in url.lower():
-
-            print(url)
+            print(
+                "-" * 80
+            )
 
 
 # ============================================================
@@ -233,8 +265,7 @@ def extract_ipo_names(bundle):
     names = set()
 
     # --------------------------------------------------------
-    # KFin's current bundle contains IPO names as JSON-style
-    # strings. Look for common name fields.
+    # Look for common IPO name fields
     # --------------------------------------------------------
 
     patterns = [
@@ -262,8 +293,7 @@ def extract_ipo_names(bundle):
             names.add(name)
 
     # --------------------------------------------------------
-    # Also detect IPO-like uppercase strings embedded in the
-    # application's data.
+    # Detect IPO-like uppercase strings
     # --------------------------------------------------------
 
     uppercase_pattern = (
@@ -289,26 +319,8 @@ def extract_ipo_names(bundle):
     except Exception:
         pass
 
-    try:
-
-        matches = re.findall(
-            uppercase_pattern,
-            bundle
-        )
-
-        for match in matches:
-
-            name = match.strip()
-
-            if name:
-
-                names.add(name)
-
-    except Exception:
-        pass
-
     # --------------------------------------------------------
-    # Remove obvious non-IPO UI text.
+    # Remove obvious non-IPO UI text
     # --------------------------------------------------------
 
     excluded = {
@@ -363,13 +375,18 @@ async def monitor_kfin():
         )
 
         page = await browser.new_page()
+
+        # ----------------------------------------------------
+        # Log browser requests
+        # ----------------------------------------------------
+
         page.on(
-    "request",
-    lambda request: print(
-        "REQUEST:",
-        request.method,
-        request.url
-    )
+            "request",
+            lambda request: print(
+                "REQUEST:",
+                request.method,
+                request.url
+            )
         )
 
         try:
@@ -420,13 +437,31 @@ async def monitor_kfin():
     ipo_names = extract_ipo_names(
         bundle
     )
-    find_api_urls(bundle)
-find_submit_logic(bundle)
+
+    find_api_urls(
+        bundle
+    )
+
+    find_submit_logic(
+        bundle
+    )
+
+    # --------------------------------------------------------
+    # Display IPO summary
+    # --------------------------------------------------------
 
     print()
-    print("=" * 60)
-    print("KFIN IPO SUMMARY")
-    print("=" * 60)
+    print(
+        "=" * 60
+    )
+
+    print(
+        "KFIN IPO SUMMARY"
+    )
+
+    print(
+        "=" * 60
+    )
 
     print(
         "IPO names detected:",
@@ -444,8 +479,8 @@ find_submit_logic(bundle)
     # --------------------------------------------------------
     # Safety check
     #
-    # If extraction unexpectedly finds nothing, DO NOT modify
-    # the existing state.
+    # If extraction unexpectedly finds nothing,
+    # do not modify existing state.
     # --------------------------------------------------------
 
     if not ipo_names:
@@ -478,9 +513,13 @@ find_submit_logic(bundle)
 
         for name in ipo_names:
 
-            state.add(name)
+            state.add(
+                name
+            )
 
-        save_state(state)
+        save_state(
+            state
+        )
 
         print(
             "Baseline created."
@@ -550,7 +589,9 @@ find_submit_logic(bundle)
                 "Telegram error:"
             )
 
-            print(error)
+            print(
+                error
+            )
 
     # --------------------------------------------------------
     # Save all currently detected names
@@ -558,14 +599,26 @@ find_submit_logic(bundle)
 
     for name in ipo_names:
 
-        state.add(name)
+        state.add(
+            name
+        )
 
-    save_state(state)
+    save_state(
+        state
+    )
 
     print()
-    print("=" * 60)
-    print("KFIN MONITOR FINISHED")
-    print("=" * 60)
+    print(
+        "=" * 60
+    )
+
+    print(
+        "KFIN MONITOR FINISHED"
+    )
+
+    print(
+        "=" * 60
+    )
 
     print(
         "New alerts:",
@@ -595,7 +648,9 @@ async def main():
             "KFin monitor failed:"
         )
 
-        print(error)
+        print(
+            error
+        )
 
         raise
 
