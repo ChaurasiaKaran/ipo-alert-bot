@@ -161,6 +161,28 @@ def download_bundle(url):
 
     return response.text
 
+# ============================================================
+# FIND API URLS
+# ============================================================
+
+def find_api_urls(bundle):
+
+    urls = set(
+        re.findall(
+            r'https?://[^"\']+',
+            bundle
+        )
+    )
+
+    print()
+    print("Possible KFin API URLs:")
+
+    for url in sorted(urls):
+
+        if "api" in url.lower() or "kfin" in url.lower():
+
+            print(url)
+
 
 # ============================================================
 # EXTRACT IPO NAMES
