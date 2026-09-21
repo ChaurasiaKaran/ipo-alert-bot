@@ -163,38 +163,62 @@ def download_bundle(url):
 def find_api_types(bundle):
 
     print()
-    print("KFin API endpoint references:")
+    print("KFin API request construction:")
 
-    patterns = [
-        r'execute-api\.ap-south-1\.amazonaws\.com/prod/api/query\?type=',
-        r'api/query\?type=',
-        r'fetch\([^)]{0,1000}execute-api',
-        r'execute-api[^;]{0,3000}',
+    target = 'to="https://0uz601ms56.execute-api.ap-south-1.amazonaws.com/prod/api/query?type="'
+
+    position = bundle.find(target)
+
+    print("Endpoint declaration position:", position)
+
+    if position == -1:
+        print("Endpoint declaration not found.")
+        return
+
+    print()
+    print("Endpoint declaration context:")
+    print("=" * 80)
+    print(bundle[max(0, position - 3000):position + 5000])
+    print("=" * 80)
+
+    # Look for likely request calls in the application code after the declaration.
+    keywords = [
+        "axios",
+        "fetch",
+        "to+",
+        "to+=",
+        "to+(",
+        "to+",
+        "Appln_No",
+        "All_Shares",
+        "Pan_No",
+        "ipoTitle",
     ]
 
-    for pattern in patterns:
+    print()
+    print("Relevant application references:")
 
-        print()
-        print("SEARCH:", pattern)
+    for keyword in keywords:
 
         matches = list(
             re.finditer(
-                pattern,
+                re.escape(keyword),
                 bundle,
                 re.IGNORECASE
             )
         )
 
+        print()
+        print("KEYWORD:", keyword)
         print("Matches:", len(matches))
 
-        for match in matches[:10]:
+        for match in matches[-10:]:
 
-            start = max(0, match.start() - 3000)
-            end = min(len(bundle), match.end() + 5000)
+            start = max(0, match.start() - 1200)
+            end = min(len(bundle), match.end() + 2000)
 
-            print("=" * 80)
+            print("-" * 80)
             print(bundle[start:end])
-            print("=" * 80)
 
 # ============================================================
 # FIND API URLS
