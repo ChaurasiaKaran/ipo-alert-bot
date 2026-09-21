@@ -329,6 +329,43 @@ def extract_ipo_names(bundle):
 # MAIN MONITOR
 # ============================================================
 
+def inspect_kfin_api(bundle):
+
+    print()
+    print("KFin API request structure:")
+    print("=" * 80)
+
+    # The website's JavaScript shows these request types.
+    print("Supported request types:")
+    print("  PAN             -> type=pan")
+    print("  Application No  -> type=appno")
+    print("  DPID Client ID  -> type=dpclid")
+
+    # Find the IPO clientId/name data embedded in the bundle.
+    pattern = r'\{"clientId":"([^"]+)","name":"([^"]+)"\}'
+    matches = re.findall(pattern, bundle)
+
+    print()
+    print("Embedded IPO records:", len(matches))
+
+    for client_id, name in matches[:10]:
+        print(f"  {name} -> client_id={client_id}")
+
+    if len(matches) > 10:
+        print(f"  ... and {len(matches) - 10} more")
+
+    print()
+    print("API endpoint:")
+    print(
+        "https://0uz601ms56.execute-api.ap-south-1.amazonaws.com/"
+        "prod/api/query?type=<TYPE>"
+    )
+
+    print()
+    print("Request headers:")
+    print("  reqparam  = lookup value")
+    print("  client_id = selected IPO clientId")
+    
 async def monitor_kfin():
 
     state = load_state()
