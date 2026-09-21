@@ -195,21 +195,15 @@ def find_api_urls(bundle):
 def find_submit_logic(bundle):
 
     print()
-    print("KFin Submit / API logic:")
+    print("Targeted KFin request construction:")
     print("=" * 80)
 
     searches = [
-        "function I(",
-        "I=>(",
-        "I=()=>",
-        "I=function",
-        "I=async",
-        "reqparam",
-        "client_id",
-        "type:",
-        "header:",
-        "const I=",
-        "let I=",
+        "e=I(),t=e.type,n=e.header",
+        "t=e.type,n=e.header",
+        "I(),t=e.type",
+        "reqparam:n",
+        "client_id:`${S}`",
     ]
 
     for keyword in searches:
@@ -224,39 +218,17 @@ def find_submit_logic(bundle):
         ]
 
         print()
-        print(
-            "SEARCH:",
-            keyword
-        )
+        print("SEARCH:", keyword)
+        print("Matches:", len(positions))
 
-        print(
-            "Matches:",
-            len(positions)
-        )
+        for pos in positions[-5:]:
 
-        for pos in positions[-10:]:
+            start = max(0, pos - 8000)
+            end = min(len(bundle), pos + 8000)
 
-            start = max(
-                0,
-                pos - 4000
-            )
-
-            end = min(
-                len(bundle),
-                pos + 6000
-            )
-
-            print(
-                "-" * 80
-            )
-
-            print(
-                bundle[start:end]
-            )
-
-            print(
-                "-" * 80
-            )
+            print("-" * 80)
+            print(bundle[start:end])
+            print("-" * 80)
 
 
 # ============================================================
