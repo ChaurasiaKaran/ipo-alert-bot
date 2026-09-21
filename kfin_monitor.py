@@ -198,18 +198,21 @@ def find_submit_logic(bundle):
     print("KFin Submit / API logic:")
     print("=" * 80)
 
-    keywords = [
-        "Please wait we are fetching your allotment status",
-        "Appln_No",
-        "Pan_No",
-        "All_Shares",
-        "submit",
-        "Submit",
-        "setIpoTitle",
-        "SelectionType",
+    searches = [
+        "function I(",
+        "I=>(",
+        "I=()=>",
+        "I=function",
+        "I=async",
+        "reqparam",
+        "client_id",
+        "type:",
+        "header:",
+        "const I=",
+        "let I=",
     ]
 
-    for keyword in keywords:
+    for keyword in searches:
 
         positions = [
             match.start()
@@ -222,7 +225,7 @@ def find_submit_logic(bundle):
 
         print()
         print(
-            "KEYWORD:",
+            "SEARCH:",
             keyword
         )
 
@@ -231,16 +234,16 @@ def find_submit_logic(bundle):
             len(positions)
         )
 
-        for pos in positions[-5:]:
+        for pos in positions[-10:]:
 
             start = max(
                 0,
-                pos - 5000
+                pos - 4000
             )
 
             end = min(
                 len(bundle),
-                pos + 5000
+                pos + 6000
             )
 
             print(
