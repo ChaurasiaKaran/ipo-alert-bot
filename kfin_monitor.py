@@ -163,16 +163,52 @@ def download_bundle(url):
 def find_api_types(bundle):
 
     print()
-    print("Possible API request types:")
+    print("Possible API query constructions:")
 
-    matches = re.findall(
-        r'query\?type=([^"&\\]+)',
-        bundle
-    )
+    patterns = [
+        r'api/query',
+        r'query\?type',
+        r'/api/query',
+        r'execute-api',
+        r'fetch\(',
+        r'axios\.',
+        r'\.get\(',
+        r'\.post\(',
+    ]
 
-    for item in sorted(set(matches)):
+    for pattern in patterns:
 
-        print(item)
+        print()
+        print("SEARCH:", pattern)
+
+        matches = list(
+            re.finditer(
+                pattern,
+                bundle,
+                re.IGNORECASE
+            )
+        )
+
+        print(
+            "Matches:",
+            len(matches)
+        )
+
+        for match in matches[:10]:
+
+            start = max(
+                0,
+                match.start() - 300
+            )
+
+            end = min(
+                len(bundle),
+                match.end() + 500
+            )
+
+            print(
+                bundle[start:end]
+            )
 
 # ============================================================
 # FIND API URLS
