@@ -380,6 +380,9 @@ async def monitor_kfin():
     ipo_names = extract_ipo_names(
         bundle
     )
+    find_api_urls(
+    bundle
+    )
 
     print()
     print("=" * 60)
