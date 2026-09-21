@@ -160,6 +160,19 @@ def download_bundle(url):
     )
 
     return response.text
+    def find_api_types(bundle):
+
+    print()
+    print("Possible API request types:")
+
+    matches = re.findall(
+        r'query\?type=([^"&\\]+)',
+        bundle
+    )
+
+    for item in sorted(set(matches)):
+
+        print(item)
 
 # ============================================================
 # FIND API URLS
@@ -381,6 +394,9 @@ async def monitor_kfin():
         bundle
     )
     find_api_urls(
+    bundle
+    )
+    find_api_types(
     bundle
     )
 
