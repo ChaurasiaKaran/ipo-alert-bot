@@ -2,8 +2,7 @@ name: IPO Monitor
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
-
+    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -11,16 +10,14 @@ permissions:
 
 concurrency:
   group: ipo-monitor
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-
   monitor:
-
     runs-on: ubuntu-latest
+    timeout-minutes: 12
 
     steps:
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -28,20 +25,25 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+
       - name: Install Playwright Chromium
         run: |
           playwright install --with-deps chromium
 
-      # ------------------------------------------------------
-      # KFIN
-      # ------------------------------------------------------
-
+      # ---------------- KFIN ----------------
       - name: Run KFin monitor
+        continue-on-error: true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -50,54 +52,46 @@ jobs:
         run: |
           python kfin_monitor.py
 
-      # ------------------------------------------------------
-      # MUFG
-      # ------------------------------------------------------
-
+      # ---------------- MUFG ----------------
       - name: Run MUFG monitor
+        continue-on-error: true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python registrar.py
 
-      # ------------------------------------------------------
-      # BIGSHARE
-      # ------------------------------------------------------
-
+      # ---------------- BIGSHARE ----------------
       - name: Run Bigshare monitor
+        continue-on-error: true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python bigshare_monitor.py
 
-      # ------------------------------------------------------
-      # CAMEO
-      # ------------------------------------------------------
-
+      # ---------------- CAMEO ----------------
       - name: Run Cameo monitor
+        continue-on-error: true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python cameo_monitor.py
 
-      # ------------------------------------------------------
-      # SAVE STATE
-      # ------------------------------------------------------
-
+      # ---------------- SAVE STATE ----------------
       - name: Save alert state
+        if: always()
         run: |
-
           git config user.name "IPO Alert Bot"
           git config user.email "actions@github.com"
 
-          git add -A
+          git add -f *_state.txt *_state.json *_tracking.json 2>/dev/null || true
 
           if git diff --cached --quiet; then
             echo "No state changes to commit."
           else
             git commit -m "Update IPO alert state"
+            git pull --rebase origin main || true
             git push
           fi
