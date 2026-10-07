@@ -86,7 +86,7 @@ jobs:
           git config user.name "IPO Alert Bot"
           git config user.email "actions@github.com"
 
-          git add -f *_state.txt *_state.json *_tracking.json 2>/dev/null || true
+          git add -A
 
           if git diff --cached --quiet; then
             echo "No state changes to commit."
