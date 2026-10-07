@@ -61,10 +61,18 @@ async def get_ipos():
             viewport={"width": 1366, "height": 768},
         )
         page = await context.new_page()
+
+        net_log = []
+        page.on("requestfailed", lambda r: net_log.append(
+            f"FAILED {r.url[:90]} | {r.failure}"))
+        page.on("response", lambda r: net_log.append(
+            f"HTTP {r.status} {r.url[:90]}") if r.status >= 400 else None)
+        page.on("console", lambda m: net_log.append(
+            f"CONSOLE {m.type}: {m.text[:120]}") if m.type == "error" else None)
         try:
             for attempt in range(1, 4):
                 try:
-                    await page.goto(KFIN_URL, wait_until="domcontentloaded", timeout=60000)
+                    await page.goto(KFIN_URL, wait_until="networkidle", timeout=60000)
                     await page.wait_for_selector(
                         "#ddlCompany option", state="attached", timeout=30000
                     )
@@ -79,6 +87,9 @@ async def get_ipos():
                     print("Page title:", await page.title())
                     body = (await page.inner_text("body"))[:500]
                     print("Page text:", body.replace("\n", " | "))
+                    print("Network problems seen:", len(net_log))
+                    for line in net_log[:15]:
+                        print("  ", line)
                     await page.screenshot(path="/tmp/kfin_debug.png", full_page=True)
                 except Exception as e:
                     print("Debug capture failed:", type(e).__name__)
