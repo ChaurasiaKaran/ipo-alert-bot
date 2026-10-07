@@ -52,7 +52,15 @@ def save_state(seen):
 async def get_ipos():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
+        context = await browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+            locale="en-IN",
+            viewport={"width": 1366, "height": 768},
+        )
+        page = await context.new_page()
         try:
             for attempt in range(1, 4):
                 try:
@@ -66,6 +74,14 @@ async def get_ipos():
                     await page.wait_for_timeout(3000)
             else:
                 print("ERROR: KFin IPO dropdown never loaded (blocked or page changed).")
+                try:
+                    print("Page URL:", page.url)
+                    print("Page title:", await page.title())
+                    body = (await page.inner_text("body"))[:500]
+                    print("Page text:", body.replace("\n", " | "))
+                    await page.screenshot(path="/tmp/kfin_debug.png", full_page=True)
+                except Exception as e:
+                    print("Debug capture failed:", type(e).__name__)
                 return None
 
             options = page.locator("#ddlCompany option")
