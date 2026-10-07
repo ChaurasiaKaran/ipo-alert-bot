@@ -6,12 +6,38 @@ import requests
 
 from playwright.async_api import async_playwright
 
-KFIN_URL = "https://ipostatus.kfintech.com/ipostatus"
+KFIN_URL = os.getenv("KFIN_URL", "https://ipostatus.kfintech.com/ipostatus")
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
-STATE_FILE = "kfin_seen_ipos.json"
+STATE_FILE = os.getenv("KFIN_STATE_FILE", "kfin_seen_ipos.json")
+
+UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+
+# Hide the usual "I am a bot" signals
+STEALTH_JS = """
+Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+Object.defineProperty(navigator, 'languages', {get: () => ['en-IN', 'en-US', 'en']});
+Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+window.chrome = window.chrome || {runtime: {}};
+"""
+
+# Runs inside the page: finds the <select> with the most options
+EXTRACT_JS = """
+() => {
+  let best = null;
+  for (const sel of document.querySelectorAll('select')) {
+    const n = sel.options.length;
+    if (!best || n > best.options.length) best = sel;
+  }
+  if (!best) return [];
+  return Array.from(best.options).map(o => [o.value, o.textContent.trim()]);
+}
+"""
 
 
 def send_telegram(message):
@@ -49,64 +75,85 @@ def save_state(seen):
         json.dump(sorted(seen), f, indent=2)
 
 
+async def dump_debug(page, log):
+    print("---- DEBUG ----")
+    try:
+        print("Page URL:", page.url)
+        print("Page title:", await page.title())
+        html = await page.content()
+        print("HTML length:", len(html))
+        root = await page.evaluate(
+            "() => { const r = document.getElementById('root');"
+            " return r ? r.innerHTML.length : -1; }"
+        )
+        print("#root content length (-1 = no #root):", root)
+        body = (await page.inner_text("body"))[:300]
+        print("Body text:", body.replace("\n", " | ") or "(empty)")
+        print("Select elements on page:", await page.locator("select").count())
+        await page.screenshot(path="/tmp/kfin_debug.png", full_page=True)
+    except Exception as e:
+        print("Debug capture failed:", type(e).__name__)
+    print("Requests/responses seen:", len(log))
+    for line in log[:25]:
+        print("  ", line)
+    print("---------------")
+
+
 async def get_ipos():
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+            ],
+        )
         context = await browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-            ),
+            user_agent=UA,
             locale="en-IN",
+            timezone_id="Asia/Kolkata",
             viewport={"width": 1366, "height": 768},
         )
+        await context.add_init_script(STEALTH_JS)
         page = await context.new_page()
 
-        net_log = []
-        page.on("requestfailed", lambda r: net_log.append(
-            f"FAILED {r.url[:90]} | {r.failure}"))
-        page.on("response", lambda r: net_log.append(
-            f"HTTP {r.status} {r.url[:90]}") if r.status >= 400 else None)
-        page.on("console", lambda m: net_log.append(
+        log = []
+        page.on("requestfailed", lambda r: log.append(
+            f"FAILED {r.method} {r.url[:100]} | {r.failure}"))
+        page.on("response", lambda r: log.append(
+            f"HTTP {r.status} {r.request.resource_type} {r.url[:100]}"))
+        page.on("pageerror", lambda e: log.append(f"PAGEERROR {str(e)[:150]}"))
+        page.on("console", lambda m: log.append(
             f"CONSOLE {m.type}: {m.text[:120]}") if m.type == "error" else None)
+
         try:
             for attempt in range(1, 4):
                 try:
-                    await page.goto(KFIN_URL, wait_until="networkidle", timeout=60000)
-                    await page.wait_for_selector(
-                        "#ddlCompany option", state="attached", timeout=30000
+                    await page.goto(KFIN_URL, wait_until="domcontentloaded", timeout=60000)
+                    # wait until some <select> has more than 1 option
+                    await page.wait_for_function(
+                        "() => Array.from(document.querySelectorAll('select'))"
+                        ".some(s => s.options.length > 1)",
+                        timeout=40000,
                     )
-                    break
+                    rows = await page.evaluate(EXTRACT_JS)
+                    ipos = {}
+                    for value, name in rows:
+                        value = (value or "").strip()
+                        if not value or not name or value in ("0", "-1"):
+                            continue
+                        ipos[value] = name
+                    if ipos:
+                        return ipos
+                    print(f"Attempt {attempt}: dropdown found but empty")
                 except Exception as e:
                     print(f"Attempt {attempt} failed: {type(e).__name__}")
+                    log.append(f"--- attempt {attempt} ended ---")
                     await page.wait_for_timeout(3000)
-            else:
-                print("ERROR: KFin IPO dropdown never loaded (blocked or page changed).")
-                try:
-                    print("Page URL:", page.url)
-                    print("Page title:", await page.title())
-                    body = (await page.inner_text("body"))[:500]
-                    print("Page text:", body.replace("\n", " | "))
-                    print("Network problems seen:", len(net_log))
-                    for line in net_log[:15]:
-                        print("  ", line)
-                    await page.screenshot(path="/tmp/kfin_debug.png", full_page=True)
-                except Exception as e:
-                    print("Debug capture failed:", type(e).__name__)
-                return None
 
-            options = page.locator("#ddlCompany option")
-            count = await options.count()
-
-            ipos = {}
-            for i in range(count):
-                opt = options.nth(i)
-                cid = (await opt.get_attribute("value") or "").strip()
-                name = (await opt.inner_text()).strip()
-                if not cid or not name or cid in ("0", "-1"):
-                    continue
-                ipos[cid] = name
-            return ipos
+            print("ERROR: KFin IPO dropdown never loaded (blocked or page changed).")
+            await dump_debug(page, log)
+            return None
         finally:
             await browser.close()
 
